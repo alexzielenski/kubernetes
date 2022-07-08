@@ -17,10 +17,22 @@ const DiscoveryEndpointRoot = "/discovery"
 // This handler serves the /discovery/v1 endpoint for a given list of
 // api resources indexed by their group version.
 type ResourceManager interface {
+	// Adds knowledge of the given groupversion to the discovery document
+	// If it was already being tracked, updates the stored DiscoveryGroupVersion
+	// Thread-safe
 	AddGroupVersion(groupName string, value metav1.DiscoveryGroupVersion)
+
+	// Removes all group versions for a given group
+	// Thread-safe
 	RemoveGroup(groupName string)
+
+	// Removes a specfic groupversion. If all versions of a group have been
+	// removed, then the entire group is unlisted.
+	// Thread-safe
 	RemoveGroupVersion(gv metav1.GroupVersion)
 
+	// Returns a restful webservice which responds to discovery requests
+	// Thread-safe
 	WebService() *restful.WebService
 }
 
@@ -45,8 +57,23 @@ func (self *resourceDiscoveryManager) AddGroupVersion(groupName string, value me
 		self.apiGroups = make(map[string]metav1.DiscoveryAPIGroup)
 	}
 
-	if existing, alreadyExists := self.apiGroups[groupName]; alreadyExists {
-		existing.Versions = append(existing.Versions, value)
+	if existing, groupExists := self.apiGroups[groupName]; groupExists {
+		// If this version already exists, replace it
+		versionExists := false
+
+		// Not very efficient, but in practice there are generally not many versions
+		for i := range existing.Versions {
+			if existing.Versions[i].Version == value.Version {
+				existing.Versions[i] = value
+				versionExists = true
+				break
+			}
+		}
+
+		if !versionExists {
+			existing.Versions = append(existing.Versions, value)
+		}
+
 	} else {
 		self.apiGroups[groupName] = metav1.DiscoveryAPIGroup{
 			Name:     groupName,
