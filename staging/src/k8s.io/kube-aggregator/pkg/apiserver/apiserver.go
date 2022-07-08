@@ -243,9 +243,10 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	s.GenericAPIServer.Handler.NonGoRestfulMux.UnlistedHandle("/apis/", apisHandler)
 
 	discoveryManager := &DiscoveryManager{
-		codecs:         aggregatorscheme.Codecs,
-		lister:         s.lister,
-		discoveryGroup: discoveryGroup(enabledVersions),
+		codecs:           aggregatorscheme.Codecs,
+		lister:           s.lister,
+		discoveryGroup:   discoveryGroup(enabledVersions),
+		internalDelegate: s.delegateHandler,
 	}
 	discoveryManager.InstallREST(s.GenericAPIServer.Handler.NonGoRestfulMux)
 
