@@ -101,22 +101,12 @@ func (self *resourceDiscoveryManager) WebService() *restful.WebService {
 	mediaTypes, _ := negotiation.MediaTypesForSerializer(self.serializer)
 	ws := new(restful.WebService)
 	ws.Path(DiscoveryEndpointRoot)
-	ws.Doc("get available API versions")
-
-	ws.Route(ws.GET("/").To(func(req *restful.Request, resp *restful.Response) {
-		// 404?
-		self.ServeHTTP(resp.ResponseWriter, req.Request)
-	}).
-		Doc("get available API versions").
-		Operation("getDiscoveryResourcesFake").
-		Produces(mediaTypes...).
-		Consumes(mediaTypes...).
-		Writes(metav1.DiscoveryAPIGroupList{}))
+	ws.Doc("get available API groupversions and resources")
 
 	ws.Route(ws.GET("/v1").To(func(req *restful.Request, resp *restful.Response) {
 		self.ServeHTTP(resp.ResponseWriter, req.Request)
 	}).
-		Doc("get available API groups and their resources").
+		Doc("get available API groupversions and their resources").
 		Operation("getDiscoveryResources").
 		Produces(mediaTypes...).
 		Consumes(mediaTypes...).
