@@ -48,6 +48,7 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
 	authorizerunion "k8s.io/apiserver/pkg/authorization/union"
 	"k8s.io/apiserver/pkg/endpoints/discovery"
+	discoveryv1 "k8s.io/apiserver/pkg/endpoints/discovery/v1"
 	"k8s.io/apiserver/pkg/endpoints/filterlatency"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
 	apiopenapi "k8s.io/apiserver/pkg/endpoints/openapi"
@@ -643,7 +644,8 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		readyzChecks:     c.ReadyzChecks,
 		livezGracePeriod: c.LivezGracePeriod,
 
-		DiscoveryGroupManager: discovery.NewRootAPIsHandler(c.DiscoveryAddresses, c.Serializer),
+		DiscoveryGroupManager:    discovery.NewRootAPIsHandler(c.DiscoveryAddresses, c.Serializer),
+		DiscoveryResourceManager: discoveryv1.NewResourceManager(c.Serializer),
 
 		maxRequestBodyBytes: c.MaxRequestBodyBytes,
 		livezClock:          clock.RealClock{},
@@ -889,6 +891,7 @@ func installAPI(s *GenericAPIServer, c *Config) {
 
 	if c.EnableDiscovery {
 		s.Handler.GoRestfulContainer.Add(s.DiscoveryGroupManager.WebService())
+		s.Handler.GoRestfulContainer.Add(s.DiscoveryResourceManager.WebService())
 	}
 	if c.FlowControl != nil && feature.DefaultFeatureGate.Enabled(features.APIPriorityAndFairness) {
 		c.FlowControl.Install(s.Handler.NonGoRestfulMux)

@@ -39,6 +39,7 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	genericapi "k8s.io/apiserver/pkg/endpoints"
 	"k8s.io/apiserver/pkg/endpoints/discovery"
+	discoveryv1 "k8s.io/apiserver/pkg/endpoints/discovery/v1"
 	"k8s.io/apiserver/pkg/endpoints/handlers/fieldmanager"
 	"k8s.io/apiserver/pkg/features"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -139,6 +140,8 @@ type GenericAPIServer struct {
 
 	// DiscoveryGroupManager serves /apis
 	DiscoveryGroupManager discovery.GroupManager
+
+	DiscoveryResourceManager discoveryv1.ResourceManager
 
 	// Enable swagger and/or OpenAPI if these configs are non-nil.
 	openAPIConfig *openapicommon.Config
@@ -673,14 +676,20 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 
 		apiGroupVersion.MaxRequestBodyBytes = s.maxRequestBodyBytes
 
-		r, err := apiGroupVersion.InstallREST(s.Handler.GoRestfulContainer)
+		apiResources, r, err := apiGroupVersion.InstallREST(s.Handler.GoRestfulContainer)
 		if err != nil {
 			return fmt.Errorf("unable to setup API %v: %v", apiGroupInfo, err)
 		}
 		resourceInfos = append(resourceInfos, r...)
-	}
 
-	s.RegisterDestroyFunc(apiGroupInfo.destroyStorage)
+		s.DiscoveryResourceManager.AddGroupVersion(
+			apiGroupInfo.PrioritizedVersions[0].Group,
+			metav1.DiscoveryGroupVersion{
+				Version:      groupVersion.Version,
+				APIResources: discoveryv1.APIResourcesToDiscoveryAPIResources(apiResources),
+			},
+		)
+	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.StorageVersionAPI) &&
 		utilfeature.DefaultFeatureGate.Enabled(features.APIServerIdentity) {
