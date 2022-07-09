@@ -120,9 +120,11 @@ type Config struct {
 	// FlowControl, if not nil, gives priority and fairness to request handling
 	FlowControl utilflowcontrol.Interface
 
-	EnableIndex     bool
-	EnableProfiling bool
-	EnableDiscovery bool
+	EnableIndex       bool
+	EnableProfiling   bool
+	EnableDiscovery   bool
+	EnableDiscoveryV1 bool
+
 	// Requires generic profiling enabled
 	EnableContentionProfiling bool
 	EnableMetrics             bool
@@ -341,6 +343,7 @@ func NewConfig(codecs serializer.CodecFactory) *Config {
 		LivezChecks:                 append([]healthz.HealthChecker{}, defaultHealthChecks...),
 		EnableIndex:                 true,
 		EnableDiscovery:             true,
+		EnableDiscoveryV1:           true,
 		EnableProfiling:             true,
 		EnableMetrics:               true,
 		MaxRequestsInFlight:         400,
@@ -891,6 +894,8 @@ func installAPI(s *GenericAPIServer, c *Config) {
 
 	if c.EnableDiscovery {
 		s.Handler.GoRestfulContainer.Add(s.DiscoveryGroupManager.WebService())
+	}
+	if c.EnableDiscoveryV1 {
 		s.Handler.GoRestfulContainer.Add(s.DiscoveryResourceManager.WebService())
 	}
 	if c.FlowControl != nil && feature.DefaultFeatureGate.Enabled(features.APIPriorityAndFairness) {

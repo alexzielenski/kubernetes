@@ -153,6 +153,11 @@ type APIAggregator struct {
 	// openAPIV3AggregationController downloads and caches OpenAPI v3 specs.
 	openAPIV3AggregationController *openapiv3controller.AggregationController
 
+	// discoveryAggregationController downloads and caches discovery documents
+	// from all aggregated apiservices so they may be served as a unified
+	// document from /discovery/v1
+	discoveryManager DiscoveryManager
+
 	// egressSelector selects the proper egress dialer to communicate with the custom apiserver
 	// overwrites proxyTransport dialer if not nil
 	egressSelector *egressselector.EgressSelector
@@ -168,6 +173,8 @@ func (cfg *Config) Complete() CompletedConfig {
 	// the kube aggregator wires its own discovery mechanism
 	// TODO eventually collapse this by extracting all of the discovery out
 	c.GenericConfig.EnableDiscovery = false
+	c.GenericConfig.EnableDiscoveryV1 = false
+
 	version := version.Get()
 	c.GenericConfig.Version = &version
 
@@ -241,14 +248,6 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	}
 	s.GenericAPIServer.Handler.NonGoRestfulMux.Handle("/apis", apisHandler)
 	s.GenericAPIServer.Handler.NonGoRestfulMux.UnlistedHandle("/apis/", apisHandler)
-
-	discoveryManager := &DiscoveryManager{
-		codecs:           aggregatorscheme.Codecs,
-		lister:           s.lister,
-		discoveryGroup:   discoveryGroup(enabledVersions),
-		internalDelegate: s.delegateHandler,
-	}
-	discoveryManager.InstallREST(s.GenericAPIServer.Handler.NonGoRestfulMux)
 
 	apiserviceRegistrationController := NewAPIServiceRegistrationController(informerFactory.Apiregistration().V1().APIServices(), s)
 	if len(c.ExtraConfig.ProxyClientCertFile) > 0 && len(c.ExtraConfig.ProxyClientKeyFile) > 0 {
@@ -368,8 +367,8 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 	return s, nil
 }
 
-// PrepareRun prepares the aggregator to run, by setting up the OpenAPI spec and calling
-// the generic PrepareRun.
+// PrepareRun prepares the aggregator to run, by setting up the OpenAPI spec &
+// aggregated discovery document and calling the generic PrepareRun.
 func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
 	// add post start hook before generic PrepareRun in order to be before /healthz installation
 	if s.openAPIConfig != nil {
@@ -385,6 +384,65 @@ func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
 			return nil
 		})
 	}
+
+	//TODO: Should this be part of constructor instead? (NewWithDelegate?)
+	internalHandlers := map[string]http.Handler{}
+
+	s.discoveryManager = NewDiscoveryManager(
+		aggregatorscheme.Codecs,
+		s.GenericAPIServer.Serializer,
+		func(a string) http.Handler {
+			// For APIServices which are internal, proxyHandlers does not have
+			// an entry
+			if a == "internal_handler_apiregistration.k8s.io" {
+				return s.GenericAPIServer.DiscoveryResourceManager
+			}
+
+			if handler, exists := internalHandlers[a]; exists {
+				return handler
+			}
+			handler, _ := s.proxyHandlers[a]
+			return handler
+		},
+	)
+
+	// Inform the discovery manager about local apiservices
+	delegateCounter := 0
+	for delegate := s.GenericAPIServer.NextDelegate(); delegate != nil; delegate = delegate.NextDelegate() {
+		handler := delegate.UnprotectedHandler()
+		if handler == nil {
+			continue
+		}
+		name := fmt.Sprintf("internal_handler_%v", delegateCounter)
+		internalHandlers[name] = handler
+		s.discoveryManager.AddAPIService(&v1.APIService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+		})
+		delegateCounter += 1
+	}
+
+	s.discoveryManager.AddAPIService(&v1.APIService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "internal_handler_apiregistration.k8s.io",
+		},
+	})
+
+	// Setup discovery endpoint
+	s.GenericAPIServer.Handler.GoRestfulContainer.Add(s.discoveryManager.WebService())
+
+	s.GenericAPIServer.AddPostStartHookOrDie("apiservice-discovery-initial", func(context genericapiserver.PostStartHookContext) error {
+		// Call synchronous function to setup initial document once server starts
+		return s.discoveryManager.RefreshDocument()
+	})
+
+	s.GenericAPIServer.AddPostStartHookOrDie("apiservice-discovery-controller", func(context genericapiserver.PostStartHookContext) error {
+		// Run discovery manager's worker to watch for new/removed/updated
+		// APIServices to the discovery document can be updated at runtime
+		s.discoveryManager.Run(context.StopCh)
+		return nil
+	})
 
 	prepared := s.GenericAPIServer.PrepareRun()
 
@@ -425,6 +483,12 @@ func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
 // AddAPIService adds an API service.  It is not thread-safe, so only call it on one thread at a time please.
 // It's a slow moving API, so its ok to run the controller on a single thread
 func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
+	// Forward calls to discovery manager to update discovery document
+	if apiService.Spec.Service == nil {
+		// Local and non-functional aggregated APIservices will have a nil service
+		s.discoveryManager.AddAPIService(apiService)
+	}
+
 	// if the proxyHandler already exists, it needs to be updated. The aggregation bits do not
 	// since they are wired against listers because they require multiple resources to respond
 	if proxyHandler, exists := s.proxyHandlers[apiService.Name]; exists {
@@ -491,6 +555,9 @@ func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 // RemoveAPIService removes the APIService from being handled.  It is not thread-safe, so only call it on one thread at a time please.
 // It's a slow moving API, so it's ok to run the controller on a single thread.
 func (s *APIAggregator) RemoveAPIService(apiServiceName string) {
+	// Forward calls to discovery manager to update discovery document
+	s.discoveryManager.RemoveAPIService(apiServiceName)
+
 	version := v1helper.APIServiceNameToGroupVersion(apiServiceName)
 
 	proxyPath := "/apis/" + version.Group + "/" + version.Version

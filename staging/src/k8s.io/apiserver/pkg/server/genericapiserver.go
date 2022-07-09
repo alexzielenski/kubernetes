@@ -778,6 +778,7 @@ func (s *GenericAPIServer) InstallAPIGroups(apiGroupInfos ...*APIGroupInfo) erro
 		s.DiscoveryGroupManager.AddGroup(apiGroup)
 		s.Handler.GoRestfulContainer.Add(discovery.NewAPIGroupHandler(s.Serializer, apiGroup).WebService())
 	}
+
 	return nil
 }
 

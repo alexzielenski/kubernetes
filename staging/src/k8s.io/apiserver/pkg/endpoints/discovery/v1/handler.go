@@ -31,9 +31,15 @@ type ResourceManager interface {
 	// Thread-safe
 	RemoveGroupVersion(gv metav1.GroupVersion)
 
+	Reset()
+
+	AddGroups([]metav1.DiscoveryAPIGroup)
+
 	// Returns a restful webservice which responds to discovery requests
 	// Thread-safe
 	WebService() *restful.WebService
+
+	ServeHTTP(resp http.ResponseWriter, req *http.Request)
 }
 
 type resourceDiscoveryManager struct {
@@ -47,6 +53,21 @@ type resourceDiscoveryManager struct {
 func NewResourceManager(serializer runtime.NegotiatedSerializer) ResourceManager {
 	result := &resourceDiscoveryManager{serializer: serializer}
 	return result
+}
+
+func (self *resourceDiscoveryManager) Reset() {
+	self.apiGroupsLock.Lock()
+	defer self.apiGroupsLock.Unlock()
+
+	self.apiGroups = nil
+}
+
+func (self *resourceDiscoveryManager) AddGroups(groups []metav1.DiscoveryAPIGroup) {
+	for _, group := range groups {
+		for _, version := range group.Versions {
+			self.AddGroupVersion(group.Name, version)
+		}
+	}
 }
 
 func (self *resourceDiscoveryManager) AddGroupVersion(groupName string, value metav1.DiscoveryGroupVersion) {
