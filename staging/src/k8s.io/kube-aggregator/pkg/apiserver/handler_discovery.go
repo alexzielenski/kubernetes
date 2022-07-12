@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,7 +27,7 @@ type DiscoveryManager interface {
 	APIHandlerManager
 
 	// Spwans a worker which waits for added/updated apiservices and updates
-	// the discovery document accordingly
+	// the unified discovery document by contacting the aggregated api services
 	Run(ctx <-chan struct{})
 
 	// Returns a restful webservice which responds to discovery requests
@@ -41,6 +42,8 @@ type discoveryManager struct {
 	getProxyHandler func(apiServiceName string) http.Handler
 
 	// Channel used to indicate that the document needs to be refreshed
+	// The Run() function starts a worker thread which waits for signals on this
+	// channel to refetch new discovery documents.
 	dirtyChannel chan struct{}
 
 	// Map from v1.APIService.Name to our stored discovery information about
@@ -52,13 +55,6 @@ type discoveryManager struct {
 	// to reach.
 	services map[string]apiServiceInfo
 
-	// The aggregated apiserver is the source of the apiregistration group
-	// Since we override the v1 endpint we need to add the group back manually
-	// (TODO: rather than hardcoding this owuldn it make sense instead to just aggregated
-	// the original discovery handler?
-	// the one that is disabled in the aggregator. it should have all the groups we want)
-	// discoveryGroup metav1.APIGroup
-
 	// Merged handler which stores all known groupversions
 	mergedDiscoveryHandler discoveryv1.ResourceManager
 }
@@ -69,6 +65,9 @@ type apiServiceInfo struct {
 	// Currently cached discovery document for this apiservice
 	// a nil discovery document indicates this service needs to be re-fetched
 	discovery *metav1.DiscoveryAPIGroupList
+
+	// ETag hash of the cached discoveryDocument
+	etag string
 }
 
 var _ DiscoveryManager = &discoveryManager{}
@@ -99,7 +98,16 @@ func handlerWithUser(handler http.Handler, info user.Info) http.Handler {
 func (self *discoveryManager) RefreshDocument() error {
 	klog.Info("Refreshing discovery information from apiservices")
 
-	servicesToUpdate := map[string]http.Handler{}
+	// information needed in the below loop to update a service
+	type serviceUpdateInfo struct {
+		// Handler For the service which repsonse to /discovery/v1 requests
+		handler http.Handler
+
+		// ETag of the existing discovery information known about the service
+		etag string
+	}
+
+	servicesToUpdate := map[string]serviceUpdateInfo{}
 
 	// Collect all services which have no discovery document and then update them
 	func() {
@@ -113,7 +121,10 @@ func (self *discoveryManager) RefreshDocument() error {
 					klog.Error(fmt.Errorf("nil discovery handler returned for APIService %v", name))
 					continue
 				}
-				servicesToUpdate[name] = handler
+				servicesToUpdate[name] = serviceUpdateInfo{
+					handler: handler,
+					etag:    service.etag,
+				}
 			}
 		}
 	}()
@@ -126,28 +137,26 @@ func (self *discoveryManager) RefreshDocument() error {
 	type resultItem struct {
 		name      string
 		discovery *metav1.DiscoveryAPIGroupList
+		etag      string
 		error     error
 	}
 
 	waitGroup := sync.WaitGroup{}
 	results := make(chan resultItem, len(servicesToUpdate))
 
-	for name, handler := range servicesToUpdate {
+	for name, updateInfo := range servicesToUpdate {
 		// Send a GET request to /discovery/v1 for each service that needs to
 		// be updated
 		waitGroup.Add(1)
 
 		// Silence loop varaible capture warning?
 		name := name
-		handler := handler
+		updateInfo := updateInfo
 
 		go func() {
 			defer waitGroup.Done()
 
-			originalHandler := handler
-			handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				originalHandler.ServeHTTP(w, req)
-			})
+			handler := updateInfo.handler
 			handler = handlerWithUser(handler, &user.DefaultInfo{Name: "system:aggregator"})
 			handler = http.TimeoutHandler(handler, 5*time.Second, "request timed out")
 
@@ -158,20 +167,24 @@ func (self *discoveryManager) RefreshDocument() error {
 				klog.Errorf("failed to create http.Request for /discovery/v1: %v", err)
 				return
 			}
+			req.Header.Add("Accept", "application/json")
+
+			if updateInfo.etag != "" {
+				req.Header.Add("If-None-Match", updateInfo.etag)
+			}
 
 			writer := newInMemoryResponseWriter()
 			handler.ServeHTTP(writer, req)
 
 			switch writer.respCode {
 			case http.StatusNotModified:
-				results <- resultItem{
-					name: name,
-				}
+				// Do nothing. Just keep the old entry
 			case http.StatusNotFound:
-				// Service does not have any information?
+				// Wipe out any data for this service
 				results <- resultItem{
 					name:      name,
 					discovery: &metav1.DiscoveryAPIGroupList{},
+					error:     errors.New("not found"),
 				}
 			case http.StatusOK:
 				parsed := &metav1.DiscoveryAPIGroupList{}
@@ -186,6 +199,7 @@ func (self *discoveryManager) RefreshDocument() error {
 				results <- resultItem{
 					name:      name,
 					discovery: parsed,
+					etag:      writer.Header().Get("Etag"),
 				}
 			default:
 				results <- resultItem{
@@ -210,6 +224,7 @@ func (self *discoveryManager) RefreshDocument() error {
 			self.services[info.name] = apiServiceInfo{
 				fresh:     true,
 				discovery: info.discovery,
+				etag:      info.etag,
 			}
 		} else {
 			// If a service was in servicesToUpdate at the beginning of this
@@ -219,6 +234,7 @@ func (self *discoveryManager) RefreshDocument() error {
 
 		// If there was an issue with fetching either apiextensions or legacy
 		// types then throw an error
+		//!TODO: This condition is never hit due to the addition of internal names
 		if info.error != nil && (info.name == "" || info.name == "apiextensions.k8s.io") {
 			return info.error
 		}
