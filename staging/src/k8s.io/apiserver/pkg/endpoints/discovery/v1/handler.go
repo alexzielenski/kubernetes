@@ -7,9 +7,8 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/endpoints/handlers/negotiation"
-	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
+	"k8s.io/klog/v2"
 )
 
 const DiscoveryEndpointRoot = "/discovery"
@@ -39,15 +38,24 @@ type ResourceManager interface {
 	// Thread-safe
 	WebService() *restful.WebService
 
-	ServeHTTP(resp http.ResponseWriter, req *http.Request)
+	http.Handler
 }
 
 type resourceDiscoveryManager struct {
-	apiGroupsLock sync.RWMutex
+	// Protects writes to all fields in struct
+	lock sync.RWMutex
+
+	// Writes protected by the lock. List if all apigroups & resources indexed
+	// by the resource manager
 	apiGroups     map[string]metav1.DiscoveryAPIGroup
 	apiGroupNames []string // apiGroupNames preserves insertion order
 
 	serializer runtime.NegotiatedSerializer
+
+	// Most up to date version of all discovery api groups
+	cachedResponse *metav1.DiscoveryAPIGroupList
+	// Hash of the cachedResponse used for cache-busting
+	cachedResponseETag string
 }
 
 func NewResourceManager(serializer runtime.NegotiatedSerializer) ResourceManager {
@@ -56,10 +64,11 @@ func NewResourceManager(serializer runtime.NegotiatedSerializer) ResourceManager
 }
 
 func (self *resourceDiscoveryManager) Reset() {
-	self.apiGroupsLock.Lock()
-	defer self.apiGroupsLock.Unlock()
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	self.apiGroups = nil
+	self.cachedResponse = nil
 }
 
 func (self *resourceDiscoveryManager) AddGroups(groups []metav1.DiscoveryAPIGroup) {
@@ -71,8 +80,8 @@ func (self *resourceDiscoveryManager) AddGroups(groups []metav1.DiscoveryAPIGrou
 }
 
 func (self *resourceDiscoveryManager) AddGroupVersion(groupName string, value metav1.DiscoveryGroupVersion) {
-	self.apiGroupsLock.Lock()
-	defer self.apiGroupsLock.Unlock()
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	if self.apiGroups == nil {
 		self.apiGroups = make(map[string]metav1.DiscoveryAPIGroup)
@@ -103,11 +112,13 @@ func (self *resourceDiscoveryManager) AddGroupVersion(groupName string, value me
 		self.apiGroupNames = append(self.apiGroupNames, groupName)
 	}
 
+	// Reset response document so it is recreated lazily
+	self.cachedResponse = nil
 }
 
 func (self *resourceDiscoveryManager) RemoveGroupVersion(apiGroup metav1.GroupVersion) {
-	self.apiGroupsLock.Lock()
-	defer self.apiGroupsLock.Unlock()
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	group, exists := self.apiGroups[apiGroup.Group]
 	if !exists {
@@ -130,11 +141,14 @@ func (self *resourceDiscoveryManager) RemoveGroupVersion(apiGroup metav1.GroupVe
 			}
 		}
 	}
+
+	// Reset response document so it is recreated lazily
+	self.cachedResponse = nil
 }
 
 func (self *resourceDiscoveryManager) RemoveGroup(groupName string) {
-	self.apiGroupsLock.Lock()
-	defer self.apiGroupsLock.Unlock()
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	delete(self.apiGroups, groupName)
 	for i := range self.apiGroupNames {
@@ -143,6 +157,9 @@ func (self *resourceDiscoveryManager) RemoveGroup(groupName string) {
 			break
 		}
 	}
+
+	// Reset response document so it is recreated lazily
+	self.cachedResponse = nil
 }
 
 func (self *resourceDiscoveryManager) WebService() *restful.WebService {
@@ -163,21 +180,46 @@ func (self *resourceDiscoveryManager) WebService() *restful.WebService {
 }
 
 func (self *resourceDiscoveryManager) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	self.apiGroupsLock.RLock()
-	defer self.apiGroupsLock.RUnlock()
+	self.lock.RLock()
+	response := self.cachedResponse
+	etag := self.cachedResponseETag
+	self.lock.RUnlock()
 
-	orderedGroups := []metav1.DiscoveryAPIGroup{}
-	for _, groupName := range self.apiGroupNames {
-		orderedGroups = append(orderedGroups, self.apiGroups[groupName])
+	// The cachedResponse is wiped out every time there might be a change to its
+	// contents.
+	if response == nil {
+		// Document does not exist, recreate it
+		self.lock.Lock()
+		defer self.lock.Unlock()
+
+		// Now that we have taken exclusive lock, check to see if another thread
+		// recreated the document while we were waiting for the lock
+		response, etag = self.cachedResponse, self.cachedResponseETag
+		if response == nil {
+			// Re-order the apiGroups by their insertion order
+			orderedGroups := []metav1.DiscoveryAPIGroup{}
+			for _, groupName := range self.apiGroupNames {
+				orderedGroups = append(orderedGroups, self.apiGroups[groupName])
+			}
+
+			var err error
+			response = &metav1.DiscoveryAPIGroupList{Groups: orderedGroups}
+			etag, err = CalculateETag(response)
+
+			if err != nil {
+				klog.Errorf("failed to caclulate etag for discovery document: %s", etag)
+			}
+
+			self.cachedResponse = response
+			self.cachedResponseETag = etag
+		}
 	}
 
-	responsewriters.WriteObjectNegotiated(
+	ServeHTTPWithETag(
+		response,
+		etag,
 		self.serializer,
-		negotiation.DefaultEndpointRestrictions,
-		schema.GroupVersion{},
 		resp,
 		req,
-		http.StatusOK,
-		&metav1.DiscoveryAPIGroupList{Groups: orderedGroups},
 	)
 }
