@@ -2,6 +2,7 @@ package v1
 
 import (
 	"crypto/sha512"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -96,7 +97,7 @@ func ServeHTTPWithETag(
 }
 
 func CalculateETag(resurces Marshalable) (string, error) {
-	serialized, err := resurces.Marshal()
+	serialized, err := json.Marshal(resurces)
 	if err != nil {
 		return "", err
 	}
