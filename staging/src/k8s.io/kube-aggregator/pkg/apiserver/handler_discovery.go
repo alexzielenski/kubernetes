@@ -364,6 +364,16 @@ func (self *discoveryManager) RemoveAPIService(apiServiceName string) {
 			return
 		}
 	}
+
+	// If we reached this point, then no services had the name given.
+	// Thus it is possible it is contained by one of the local apiservices.
+	// Just refresh them all
+	for _, info := range self.services {
+		if info.local {
+			info.fresh = false
+		}
+	}
+	self.kickWorker()
 }
 
 func (self *discoveryManager) WebService() *restful.WebService {
