@@ -72,9 +72,12 @@ func (self *resourceDiscoveryManager) Reset() {
 }
 
 func (self *resourceDiscoveryManager) AddGroups(groups []metav1.DiscoveryAPIGroup) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
 	for _, group := range groups {
 		for _, version := range group.Versions {
-			self.AddGroupVersion(group.Name, version)
+			self.addGroupVersionLocked(group.Name, version)
 		}
 	}
 }
@@ -82,6 +85,11 @@ func (self *resourceDiscoveryManager) AddGroups(groups []metav1.DiscoveryAPIGrou
 func (self *resourceDiscoveryManager) AddGroupVersion(groupName string, value metav1.DiscoveryGroupVersion) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
+
+	self.addGroupVersionLocked(groupName, value)
+}
+
+func (self *resourceDiscoveryManager) addGroupVersionLocked(groupName string, value metav1.DiscoveryGroupVersion) {
 
 	if self.apiGroups == nil {
 		self.apiGroups = make(map[string]metav1.DiscoveryAPIGroup)
