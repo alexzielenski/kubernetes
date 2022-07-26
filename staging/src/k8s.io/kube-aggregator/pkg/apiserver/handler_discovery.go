@@ -164,9 +164,8 @@ func (self *discoveryManager) RefreshDocument() error {
 
 		go func() {
 			defer waitGroup.Done()
-
 			handler := updateInfo.handler
-			handler = handlerWithUser(handler, &user.DefaultInfo{Name: "system:aggregator"})
+			handler = handlerWithUser(handler, &user.DefaultInfo{Name: "system:kube-aggregator", Groups: []string{"system:masters"}})
 			handler = http.TimeoutHandler(handler, 5*time.Second, "request timed out")
 
 			req, err := http.NewRequest("GET", "/discovery/v1", nil)
@@ -210,11 +209,14 @@ func (self *discoveryManager) RefreshDocument() error {
 					discovery: parsed,
 					etag:      writer.Header().Get("Etag"),
 				}
+				klog.Infof("DiscoveryManager: Successfully downloaded discovery for %s", name)
 			default:
 				results <- resultItem{
-					name:  name,
-					error: fmt.Errorf("service %s returned unknown response code: %v", name, writer.respCode),
+					name:      name,
+					discovery: &metav1.DiscoveryAPIGroupList{},
+					error:     fmt.Errorf("service %s returned unknown response code: %v", name, writer.respCode),
 				}
+				klog.Infof("DiscoveryManager: Failed to download discovery for %s: %s %s", name, writer.respCode, writer.data)
 			}
 		}()
 	}
@@ -250,15 +252,27 @@ func (self *discoveryManager) RefreshDocument() error {
 	// to respond to HTTP requests
 	self.mergedDiscoveryHandler.Reset()
 	for _, info := range self.services {
-		self.mergedDiscoveryHandler.AddGroups(info.discovery.Groups)
+		if info.discovery != nil {
+			self.mergedDiscoveryHandler.AddGroups(info.discovery.Groups)
+		}
 	}
 
 	return nil
 }
 
+func (self *discoveryManager) markAPIServicesDirty() {
+	self.servicesLock.Lock()
+	defer self.servicesLock.Unlock()
+	for _, info := range self.services {
+		if !info.local {
+			info.fresh = false
+		}
+	}
+}
+
 // Spwans a goroutune which waits for added/updated apiservices and updates
 // the discovery document accordingly
-func (self *discoveryManager) Run(ctx <-chan struct{}) {
+func (self *discoveryManager) Run(stopCh <-chan struct{}) {
 	klog.Info("Starting ResourceDiscoveryManager")
 
 	// Every time the dirty channel is signalled, refresh the document
@@ -270,6 +284,21 @@ func (self *discoveryManager) Run(ctx <-chan struct{}) {
 			klog.Error(err)
 		}
 	})
+	// TODO: This should be in a constant
+	ticker := time.NewTicker(60 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				self.markAPIServicesDirty()
+				self.dirtyChannel <- struct{}{}
+			case <-stopCh:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
 }
 
 // Wakes worker thread to notice the change and update the discovery document

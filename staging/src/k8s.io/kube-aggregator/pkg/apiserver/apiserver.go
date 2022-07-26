@@ -458,9 +458,6 @@ func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
 // AddAPIService adds an API service.  It is not thread-safe, so only call it on one thread at a time please.
 // It's a slow moving API, so its ok to run the controller on a single thread
 func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
-	// Forward calls to discovery manager to update discovery document
-	s.discoveryManager.AddAPIService(apiService)
-
 	// if the proxyHandler already exists, it needs to be updated. The aggregation bits do not
 	// since they are wired against listers because they require multiple resources to respond
 	if proxyHandler, exists := s.proxyHandlers[apiService.Name]; exists {
@@ -471,6 +468,8 @@ func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 		if s.openAPIV3AggregationController != nil {
 			s.openAPIV3AggregationController.UpdateAPIService(proxyHandler, apiService)
 		}
+		// Forward calls to discovery manager to update discovery document
+		s.discoveryManager.AddAPIService(apiService)
 		return nil
 	}
 
@@ -498,6 +497,10 @@ func (s *APIAggregator) AddAPIService(apiService *v1.APIService) error {
 	s.proxyHandlers[apiService.Name] = proxyHandler
 	s.GenericAPIServer.Handler.NonGoRestfulMux.Handle(proxyPath, proxyHandler)
 	s.GenericAPIServer.Handler.NonGoRestfulMux.UnlistedHandlePrefix(proxyPath+"/", proxyHandler)
+
+	// Forward calls to discovery manager to update discovery document
+	// This must be called after the proxyHandler for the apiservices are set up
+	s.discoveryManager.AddAPIService(apiService)
 
 	// if we're dealing with the legacy group, we're done here
 	if apiService.Name == legacyAPIServiceName {

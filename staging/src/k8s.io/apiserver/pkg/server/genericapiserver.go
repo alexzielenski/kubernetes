@@ -682,6 +682,7 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 		}
 		resourceInfos = append(resourceInfos, r...)
 
+		klog.Infof("Adding GroupVersion %s %s to DiscoveryManager", groupVersion.Group, groupVersion.Version)
 		s.DiscoveryResourceManager.AddGroupVersion(
 			apiGroupInfo.PrioritizedVersions[0].Group,
 			metav1.DiscoveryGroupVersion{
