@@ -23,11 +23,12 @@ import (
 
 	"k8s.io/api/admissionregistration/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apiserver/pkg/admission/plugin/cel/internal/generic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -121,18 +122,32 @@ func (c *celAdmissionController) reconcilePolicyDefinition(namespace, name strin
 	if _, ok := c.paramsCRDControllers[*paramSource]; !ok {
 		instanceContext, instanceCancel := context.WithCancel(c.runningContext)
 
-		// Watch for new instances of this policy
-		informer := dynamicinformer.NewFilteredDynamicInformer(
-			c.dynamicClient,
-			paramsGVR.Resource,
-			corev1.NamespaceAll,
-			30*time.Second,
-			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-			nil,
-		)
+		// Check if our informer factory supports this GVR for a native-typed informer
+		// This prevents duplicated watches of the same resource for native types
+		var informer informers.GenericInformer
+
+		if c.factory != nil {
+			informer, err = c.factory.ForResource(paramsGVR.Resource)
+		}
+
+		if informer == nil || err != nil {
+			// For CRDs we create a purpose-built infomrer
+			// (since there is no good way to share them AND dynamically stop
+			// them when not needed)
+			informer = dynamicinformer.NewFilteredDynamicInformer(
+				c.dynamicClient,
+				paramsGVR.Resource,
+				corev1.NamespaceAll,
+				30*time.Second,
+				cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+				nil,
+			)
+
+			go informer.Informer().Run(instanceContext.Done())
+		}
 
 		controller := generic.NewController(
-			generic.NewInformer[*unstructured.Unstructured](informer.Informer()),
+			generic.NewInformer[runtime.Object](informer.Informer()),
 			c.reconcileParams,
 			generic.ControllerOptions{
 				Workers: 1,
@@ -146,7 +161,6 @@ func (c *celAdmissionController) reconcilePolicyDefinition(namespace, name strin
 			dependentDefinitions: sets.NewString(namespacedName),
 		}
 
-		go informer.Informer().Run(instanceContext.Done())
 		go controller.Run(instanceContext)
 	}
 
@@ -213,7 +227,7 @@ func (c *celAdmissionController) reconcilePolicyBinding(namespace, name string, 
 	return nil
 }
 
-func (c *celAdmissionController) reconcileParams(namespace, name string, params *unstructured.Unstructured) error {
+func (c *celAdmissionController) reconcileParams(namespace, name string, params runtime.Object) error {
 	// Do nothing.
 	// When we add informational type checking we will need to compile in the
 	// reconcile loops instead of lazily so we can add compiler errors / type

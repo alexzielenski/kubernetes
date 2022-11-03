@@ -24,12 +24,13 @@ import (
 	"k8s.io/api/admissionregistration/v1alpha1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/admission/plugin/cel/internal/generic"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -48,6 +49,7 @@ type celAdmissionController struct {
 	// dynamicclient used to create informers to watch the param crd types
 	dynamicClient dynamic.Interface
 	restMapper    meta.RESTMapper // WantsRESTMapper
+	factory       informers.SharedInformerFactory
 
 	// Provided to the policy's Compile function as an injected dependency to
 	// assist with compiling its expressions to CEL
@@ -101,7 +103,7 @@ type bindingInfo struct {
 
 type paramInfo struct {
 	// Controller which is watching this param CRD
-	controller generic.Controller[*unstructured.Unstructured]
+	controller generic.Controller[runtime.Object]
 
 	// Function to call to stop the informer and clean up the controller
 	stop func()
@@ -254,7 +256,7 @@ func (c *celAdmissionController) Validate(
 				continue
 			}
 
-			var param *unstructured.Unstructured
+			var param runtime.Object
 
 			// If definition has no paramKind, always provide nil params to
 			// evaluator. If binding specifies a params to use they are ignored.

@@ -294,30 +294,6 @@ func (c *celAdmissionController) getCurrentObject(obj runtime.Object) (runtime.O
 	defer c.mutex.RUnlock()
 
 	switch obj.(type) {
-	case *unstructured.Unstructured:
-		paramSourceGVK := obj.GetObjectKind().GroupVersionKind()
-		paramKind := v1alpha1.ParamKind{
-			APIVersion: paramSourceGVK.GroupVersion().String(),
-			Kind:       paramSourceGVK.Kind,
-		}
-		var paramInformer generic.Informer[*unstructured.Unstructured]
-		if paramInfo, ok := c.paramsCRDControllers[paramKind]; ok {
-			paramInformer = paramInfo.controller.Informer()
-		} else {
-			// Treat unknown CRD the same as not found
-			return nil, nil
-		}
-
-		// Param type. Just check informer for its GVK
-		item, err := paramInformer.Get(accessor.GetName())
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, err
-		}
-
-		return item, nil
 	case *v1alpha1.ValidatingAdmissionPolicyBinding:
 		namespacedName := accessor.GetNamespace() + "/" + accessor.GetName()
 		info, ok := c.bindingInfos[namespacedName]
@@ -335,7 +311,29 @@ func (c *celAdmissionController) getCurrentObject(obj runtime.Object) (runtime.O
 
 		return info.lastReconciledValue, nil
 	default:
-		panic(fmt.Errorf("unhandled object type: %T", obj))
+		paramSourceGVK := obj.GetObjectKind().GroupVersionKind()
+		paramKind := v1alpha1.ParamKind{
+			APIVersion: paramSourceGVK.GroupVersion().String(),
+			Kind:       paramSourceGVK.Kind,
+		}
+		var paramInformer generic.Informer[runtime.Object]
+		if paramInfo, ok := c.paramsCRDControllers[paramKind]; ok {
+			paramInformer = paramInfo.controller.Informer()
+		} else {
+			// Treat unknown CRD the same as not found
+			return nil, nil
+		}
+
+		// Param type. Just check informer for its GVK
+		item, err := paramInformer.Get(accessor.GetName())
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, err
+		}
+
+		return item, nil
 	}
 }
 
