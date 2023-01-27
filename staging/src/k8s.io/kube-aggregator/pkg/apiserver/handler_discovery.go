@@ -333,17 +333,16 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 func (dm *discoveryManager) syncAPIService(apiServiceName string) error {
 	info, exists := dm.getInfoForAPIService(apiServiceName)
 
-	gv := helper.APIServiceNameToGroupVersion(apiServiceName)
-	mgv := metav1.GroupVersion{Group: gv.Group, Version: gv.Version}
+	gv := metav1.GroupVersion(helper.APIServiceNameToGroupVersion(apiServiceName))
 
 	if !exists {
 		// apiservice was removed. remove it from merged discovery
-		dm.mergedDiscoveryHandler.RemoveGroupVersion(mgv)
+		dm.mergedDiscoveryHandler.RemoveGroupVersion(gv)
 		return nil
 	}
 
 	// Lookup last cached result for this apiservice's service.
-	cached, err := dm.fetchFreshDiscoveryForService(mgv, info)
+	cached, err := dm.fetchFreshDiscoveryForService(gv, info)
 
 	var entry apidiscoveryv2beta1.APIVersionDiscovery
 
@@ -361,7 +360,7 @@ func (dm *discoveryManager) syncAPIService(apiServiceName string) error {
 		}
 	} else {
 		// Find our specific groupversion within the discovery document
-		entry, exists = cached.discovery[mgv]
+		entry, exists = cached.discovery[gv]
 		if exists {
 			// The stale/fresh entry has our GV, so we can include it in the doc
 		} else {
@@ -382,7 +381,8 @@ func (dm *discoveryManager) syncAPIService(apiServiceName string) error {
 	}
 
 	dm.mergedDiscoveryHandler.AddGroupVersion(gv.Group, entry)
-	dm.mergedDiscoveryHandler.SetGroupVersionPriority(metav1.GroupVersion(gv), info.groupPriority, info.versionPriority)
+	dm.mergedDiscoveryHandler.SetGroupVersionPriority(
+		gv, info.groupPriority, info.versionPriority)
 	return nil
 }
 
@@ -393,6 +393,21 @@ func (dm *discoveryManager) Run(stopCh <-chan struct{}) {
 
 	// Shutdown the queue since stopCh was signalled
 	defer dm.dirtyAPIServiceQueue.ShutDown()
+
+	// Before starting workers, add all services to discovery document but
+	// marked as Stale. This is so that on startup we can tell the users that
+	// we know about aggregated API services, they just haven't synced.
+	for key, info := range dm.apiServices {
+		gv := metav1.GroupVersion(helper.APIServiceNameToGroupVersion(key))
+		dm.mergedDiscoveryHandler.AddGroupVersion(gv.Group,
+			apidiscoveryv2beta1.APIVersionDiscovery{
+				Version:   gv.Version,
+				Freshness: apidiscoveryv2beta1.DiscoveryFreshnessStale,
+				Resources: nil,
+			})
+		dm.mergedDiscoveryHandler.SetGroupVersionPriority(
+			gv, info.groupPriority, info.versionPriority)
+	}
 
 	// Spawn workers
 	// These workers wait for APIServices to be marked dirty.
