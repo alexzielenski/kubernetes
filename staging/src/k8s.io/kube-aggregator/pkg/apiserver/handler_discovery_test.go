@@ -166,6 +166,66 @@ func TestDirty(t *testing.T) {
 	}
 }
 
+// Show that if it takes a long time to sync the initial list of services, they
+// still appear in discovery document as `Stale` with nil/empty Resources
+func TestStaleInitialList(t *testing.T) {
+	testCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	service := discoveryendpoint.NewResourceManager()
+	versions := apidiscoveryv2beta1.APIVersionDiscovery{
+		Version: "v1",
+		Resources: []apidiscoveryv2beta1.APIResourceDiscovery{
+			{
+				Resource:         "objs",
+				SingularResource: "obj",
+			},
+		},
+	}
+	service.AddGroupVersion("stable.example.com", versions)
+	serviceBlockerCh := make(chan struct{})
+
+	aggregatedManager := newDiscoveryManager(discoveryendpoint.NewResourceManager())
+	aggregatedManager.AddAPIService(&apiregistrationv1.APIService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "v1.stable.example.com",
+		},
+		Spec: apiregistrationv1.APIServiceSpec{
+			Group:   "stable.example.com",
+			Version: "v1",
+			Service: &apiregistrationv1.ServiceReference{
+				Name: "test-service",
+			},
+		},
+	}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-serviceBlockerCh
+		service.ServeHTTP(w, r)
+	}))
+
+	go aggregatedManager.Run(testCtx.Done())
+
+	// Show that our service is in the list with Stale freshness, no resources
+	response, _, parsed := fetchPath(aggregatedManager.mergedDiscoveryHandler, "")
+	require.Equal(t, http.StatusOK, response.StatusCode, "expected successful fetch of document even while not all documents synced")
+	require.Len(t, parsed.Items, 1, "expected a single group")
+	require.Len(t, parsed.Items[0].Versions, 1, "expected a single version")
+	require.Empty(t, parsed.Items[0].Versions[0].Resources, "expected empty resources")
+	require.Equal(t, apidiscoveryv2beta1.DiscoveryFreshnessStale, parsed.Items[0].Versions[0].Freshness, "expected stale freshness")
+
+	// Allow the controller's reconciler to continue/finish the request
+	close(serviceBlockerCh)
+	require.True(t, waitForEmptyQueue(testCtx.Done(), aggregatedManager))
+
+	// Show that service now in the list with non-Stale freshness, populated
+	// resources
+	response, _, parsed = fetchPath(aggregatedManager.mergedDiscoveryHandler, "")
+	require.Equal(t, http.StatusOK, response.StatusCode, "expected successful fetch of document after sync")
+	require.Len(t, parsed.Items, 1, "expected a single group")
+	require.Len(t, parsed.Items[0].Versions, 1, "expected a single version")
+	require.Equal(t, apidiscoveryv2beta1.DiscoveryFreshnessCurrent, parsed.Items[0].Versions[0].Freshness, "expected current freshness")
+	require.Equal(t, versions, parsed.Items[0].Versions[0].Resources, "expected resources")
+}
+
 // Show that an APIService can be removed and that its group no longer remains
 // if there are no versions
 func TestRemoveAPIService(t *testing.T) {
