@@ -26,6 +26,7 @@ import (
 	apidiscoveryv2beta1 "k8s.io/api/apidiscovery/v2beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/endpoints"
@@ -86,6 +87,15 @@ type discoveryManager struct {
 
 	// Merged handler which stores all known groupversions
 	mergedDiscoveryHandler discoveryendpoint.ResourceManager
+
+	// Protects tracker
+	trackerLock sync.Mutex
+
+	// Items are added to the set when they are added to the queue, and removed
+	// from the set when removed from the queue.
+	// Used for testing only.
+	// Protected by trackerLock
+	tracker sets.Set[string]
 }
 
 // Version of Service/Spec with relevant fields for use as a cache key
@@ -167,6 +177,7 @@ func NewDiscoveryManager(
 		apiServices:            make(map[string]groupVersionInfo),
 		cachedResults:          make(map[serviceKey]cachedResult),
 		dirtyAPIServiceQueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "discovery-manager"),
+		tracker:                sets.New[string](),
 	}
 }
 
@@ -409,11 +420,16 @@ func (dm *discoveryManager) Run(stopCh <-chan struct{}) {
 
 				func() {
 					defer dm.dirtyAPIServiceQueue.Done(next)
+					nextString, ok := next.(string)
+					if !ok {
+						dm.dirtyAPIServiceQueue.Forget(next)
+						return
+					}
 
-					if err := dm.syncAPIService(next.(string)); err != nil {
+					if err := dm.syncAPIService(nextString); err != nil {
 						dm.dirtyAPIServiceQueue.AddRateLimited(next)
 					} else {
-						dm.dirtyAPIServiceQueue.Forget(next)
+						dm.removeFromDirtyQueue(nextString)
 					}
 				}()
 			}
@@ -433,7 +449,8 @@ func (dm *discoveryManager) Run(stopCh <-chan struct{}) {
 		for key, info := range dm.apiServices {
 			info.lastMarkedDirty = now
 			dm.apiServices[key] = info
-			dm.dirtyAPIServiceQueue.Add(key)
+
+			dm.addToDirtyQueue(key)
 		}
 		return false, nil
 	}, stopCh)
@@ -456,14 +473,10 @@ func (dm *discoveryManager) AddAPIService(apiService *apiregistrationv1.APIServi
 		lastMarkedDirty: time.Now(),
 		service:         newServiceKey(*apiService.Spec.Service),
 	})
-	dm.dirtyAPIServiceQueue.Add(apiService.Name)
 }
 
 func (dm *discoveryManager) RemoveAPIService(apiServiceName string) {
-	if dm.setInfoForAPIService(apiServiceName, nil) != nil {
-		// mark dirty if there was actually something deleted
-		dm.dirtyAPIServiceQueue.Add(apiServiceName)
-	}
+	dm.setInfoForAPIService(apiServiceName, nil)
 }
 
 //
@@ -493,13 +506,11 @@ func (dm *discoveryManager) getInfoForAPIService(name string) (groupVersionInfo,
 	return result, ok
 }
 
-func (dm *discoveryManager) setInfoForAPIService(name string, result *groupVersionInfo) (oldValueIfExisted *groupVersionInfo) {
+func (dm *discoveryManager) setInfoForAPIService(name string, result *groupVersionInfo) {
 	dm.servicesLock.Lock()
 	defer dm.servicesLock.Unlock()
 
-	if oldValue, exists := dm.apiServices[name]; exists {
-		oldValueIfExisted = &oldValue
-	}
+	_, exists := dm.apiServices[name]
 
 	if result != nil {
 		dm.apiServices[name] = *result
@@ -507,7 +518,29 @@ func (dm *discoveryManager) setInfoForAPIService(name string, result *groupVersi
 		delete(dm.apiServices, name)
 	}
 
-	return oldValueIfExisted
+	if exists || result != nil {
+		dm.addToDirtyQueue(name)
+	}
+}
+
+func (dm *discoveryManager) addToDirtyQueue(name string) {
+	dm.trackerLock.Lock()
+	defer dm.trackerLock.Unlock()
+	dm.tracker.Insert(name)
+	dm.dirtyAPIServiceQueue.Add(name)
+}
+
+func (dm *discoveryManager) removeFromDirtyQueue(name string) {
+	dm.trackerLock.Lock()
+	defer dm.trackerLock.Unlock()
+	dm.tracker.Delete(name)
+	dm.dirtyAPIServiceQueue.Forget(name)
+}
+
+func (dm *discoveryManager) dirtyQueueIsEmpty() bool {
+	dm.trackerLock.Lock()
+	defer dm.trackerLock.Unlock()
+	return dm.tracker.Len() == 0
 }
 
 // !TODO: This was copied from staging/src/k8s.io/kube-aggregator/pkg/controllers/openapi/aggregator/downloader.go

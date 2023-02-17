@@ -47,10 +47,7 @@ func newDiscoveryManager(rm discoveryendpoint.ResourceManager) *discoveryManager
 // Returns true if the queue of services to sync empty this means everything has
 // been reconciled and placed into merged document
 func waitForEmptyQueue(stopCh <-chan struct{}, dm *discoveryManager) bool {
-	return cache.WaitForCacheSync(stopCh, func() bool {
-		// Once items have successfully synced they are removed from queue.
-		return dm.dirtyAPIServiceQueue.Len() == 0
-	})
+	return cache.WaitForCacheSync(stopCh, dm.dirtyQueueIsEmpty)
 }
 
 // Test that the discovery manager starts and aggregates from two local API services
