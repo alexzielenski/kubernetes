@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -133,7 +134,7 @@ func checkAPIGroups(t *testing.T, api apidiscoveryv2beta1.APIGroupDiscoveryList,
 // Test that a handler associated with an APIService gets pinged after the
 // APIService has been marked as dirty
 func TestDirty(t *testing.T) {
-	pinged := false
+	pinged := atomic.Bool{}
 	service := discoveryendpoint.NewResourceManager()
 	aggregatedResourceManager := discoveryendpoint.NewResourceManager()
 
@@ -151,7 +152,7 @@ func TestDirty(t *testing.T) {
 			},
 		},
 	}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pinged = true
+		pinged.Store(true)
 		service.ServeHTTP(w, r)
 	}))
 	testCtx, cancel := context.WithCancel(context.Background())
@@ -161,7 +162,44 @@ func TestDirty(t *testing.T) {
 	require.True(t, waitForEmptyQueue(testCtx.Done(), aggregatedManager))
 
 	// immediately check for ping, since Run() should block for local services
-	if !pinged {
+	if !pinged.Load() {
+		t.Errorf("service handler never pinged")
+	}
+}
+
+// Shows that waitForEmptyQueue also waits for syncing to
+// complete
+func TestWaitForSync(t *testing.T) {
+	pinged := atomic.Bool{}
+	service := discoveryendpoint.NewResourceManager()
+	aggregatedResourceManager := discoveryendpoint.NewResourceManager()
+
+	aggregatedManager := newDiscoveryManager(aggregatedResourceManager)
+
+	aggregatedManager.AddAPIService(&apiregistrationv1.APIService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "v1.stable.example.com",
+		},
+		Spec: apiregistrationv1.APIServiceSpec{
+			Group:   "stable.example.com",
+			Version: "v1",
+			Service: &apiregistrationv1.ServiceReference{
+				Name: "test-service",
+			},
+		},
+	}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(3 * time.Second)
+		pinged.Store(true)
+		service.ServeHTTP(w, r)
+	}))
+	testCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go aggregatedManager.Run(testCtx.Done())
+	require.True(t, waitForEmptyQueue(testCtx.Done(), aggregatedManager))
+
+	// immediately check for ping, since Run() should block for local services
+	if !pinged.Load() {
 		t.Errorf("service handler never pinged")
 	}
 }
