@@ -199,7 +199,12 @@ func validateListMap(fldPath *field.Path, s *schema.Structural, obj []interface{
 		for _, keyField := range s.XListMapKeys {
 			if k, ok := x[keyField]; ok {
 				key[keyField] = k
+			} else if s.Items != nil {
+				if fieldSchema, hasField := s.Items.Properties[keyField]; hasField && fieldSchema.Default.Object != nil {
+					key[keyField] = fieldSchema.Default.Object
+				}
 			}
+
 		}
 
 		keys = append(keys, key)
