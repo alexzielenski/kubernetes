@@ -51,6 +51,7 @@ import (
 	serveroptions "k8s.io/apiserver/pkg/server/options"
 	serverstorage "k8s.io/apiserver/pkg/server/storage"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	utilunknownversionproxy "k8s.io/apiserver/pkg/util/unknownversionproxy"
 	utilflowcontrol "k8s.io/apiserver/pkg/util/flowcontrol"
 	"k8s.io/apiserver/pkg/util/notfoundhandler"
 	"k8s.io/apiserver/pkg/util/openapi"
@@ -475,6 +476,9 @@ func buildGenericConfig(
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIPriorityAndFairness) && s.GenericServerRunOptions.EnablePriorityAndFairness {
 		genericConfig.FlowControl, lastErr = BuildPriorityAndFairness(s, clientgoExternalClient, versionedInformers)
 	}
+	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIServerIdentity) && utilfeature.DefaultFeatureGate.Enabled(genericfeatures.StorageVersionAPI) {
+		genericConfig.APIServerProxy, lastErr = BuildUnknownVersionProxy(versionedInformers)
+	}
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.AggregatedDiscoveryEndpoint) {
 		genericConfig.AggregatedDiscoveryGroupManager = aggregated.NewResourceManager("apis")
 	}
@@ -507,6 +511,12 @@ func BuildPriorityAndFairness(s *options.ServerRunOptions, extclient clientgocli
 		extclient.FlowcontrolV1beta3(),
 		s.GenericServerRunOptions.MaxRequestsInFlight+s.GenericServerRunOptions.MaxMutatingRequestsInFlight,
 		s.GenericServerRunOptions.RequestTimeout/4,
+	), nil
+}
+
+func BuildUnknownVersionProxy(versionedInformer clientgoinformers.SharedInformerFactory) (utilflowcontrol.Interface, error) {
+	return utilunknownversionproxy.New(
+		versionedInformer,
 	), nil
 }
 
