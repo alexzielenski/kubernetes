@@ -373,6 +373,7 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 			return nil
 		})
 	}
+
 	return s, nil
 }
 

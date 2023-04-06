@@ -579,8 +579,7 @@ func labelAPIServerHeartbeatFunc(identity string) lease.ProcessLeaseFunc {
 
 func addAnnotationsForHostnamePort(lease *coordinationapiv1.Lease, hostname string)  {
 	if lease.Annotations == nil {
-		lease.Annotations = map[string]string{"hostname": hostname, "port": "443"}
-		return
+		lease.Annotations = map[string]string{}
 	}
 	lease.Annotations["hostname"] = hostname
 	lease.Annotations["port"] = "443"
