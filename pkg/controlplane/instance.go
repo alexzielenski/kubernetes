@@ -572,8 +572,18 @@ func labelAPIServerHeartbeatFunc(identity string) lease.ProcessLeaseFunc {
 
 		// convenience label to easily map a lease object to a specific apiserver
 		lease.Labels[apiv1.LabelHostname] = hostname
+		addAnnotationsForHostnamePort(lease, hostname)
 		return nil
 	}
+}
+
+func addAnnotationsForHostnamePort(lease *coordinationapiv1.Lease, hostname string)  {
+	if lease.Annotations == nil {
+		lease.Annotations = map[string]string{"hostname": hostname, "port": "443"}
+		return
+	}
+	lease.Annotations["hostname"] = hostname
+	lease.Annotations["port"] = "443"
 }
 
 // InstallLegacyAPI will install the legacy APIs for the restStorageProviders if they are enabled.

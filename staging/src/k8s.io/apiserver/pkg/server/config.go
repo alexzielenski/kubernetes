@@ -69,7 +69,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	utilflowcontrol "k8s.io/apiserver/pkg/util/flowcontrol"
 	flowcontrolrequest "k8s.io/apiserver/pkg/util/flowcontrol/request"
-	utilapiserverproxy "k8s.io/apiserver/pkg/util/unknownversionproxy"
+	utilunknownversionproxy "k8s.io/apiserver/pkg/util/unknownversionproxy"
 	"k8s.io/client-go/informers"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/component-base/logs"
@@ -126,7 +126,7 @@ type Config struct {
 	// FlowControl, if not nil, gives priority and fairness to request handling
 	FlowControl utilflowcontrol.Interface
 
-	APIServerProxy utilapiserverproxy.Interface
+	UnknownVersionProxy utilunknownversionproxy.Interface
 
 	EnableIndex     bool
 	EnableProfiling bool
@@ -901,8 +901,8 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	handler = genericapifilters.WithAuthorization(handler, c.Authorization.Authorizer, c.Serializer)
 	handler = filterlatency.TrackStarted(handler, c.TracerProvider, "authorization")
 
-	if c.APIServerProxy != nil {
-		handler = genericfilters.WithUnknownVersionProxy(handler, c.APIServerID, c.APIServerProxy, c.Serializer)
+	if c.UnknownVersionProxy != nil {
+		handler = genericfilters.WithUnknownVersionProxy(handler, c.APIServerID, c.UnknownVersionProxy, c.Serializer)
 	}
 	if c.FlowControl != nil {
 		workEstimatorCfg := flowcontrolrequest.DefaultWorkEstimatorConfig()

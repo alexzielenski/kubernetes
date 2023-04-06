@@ -19,16 +19,22 @@ package unknownversionproxy
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
+	"time"
 
+	v1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 	kubeinformers "k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	apiserverinternallister "k8s.io/client-go/listers/apiserverinternal/v1alpha1"
+	coordlisters "k8s.io/client-go/listers/coordination/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -79,8 +85,8 @@ func (cfgCtlr *configController) Handle(handler http.Handler, localAPIServerId s
 
 		storageVersions, err := cfgCtlr.svLister.Get(fmt.Sprintf("%s.%s", requestInfo.APIGroup, requestInfo.Resource))
 		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("failed to serve request: No StorageVersion found for the requested GVR: %v", err))
-			responsewriters.InternalError(w, req, errors.New("failed to create audit event"))
+			// this means that resource is an aggregated API or a CR, pass as it is
+			klog.Warningf(fmt.Sprintf("No StorageVersion found for the GV: %v skipping proxying", gv))
 			return
 		}
 
@@ -91,6 +97,7 @@ func (cfgCtlr *configController) Handle(handler http.Handler, localAPIServerId s
 				if version == requestInfo.APIVersion {
 					// found the gvr locally, pass handler as it is
 					if sv.APIServerID == localAPIServerId {
+						klog.Infof(fmt.Sprintf("Resource can be served locally, skipping proxying"))
 						handler.ServeHTTP(w, req)
 						return
 					}
@@ -99,20 +106,60 @@ func (cfgCtlr *configController) Handle(handler http.Handler, localAPIServerId s
 			}
 		}
 
+		// TODO : is this right?
 		if len(serviceableBy) == 0 {
-			utilruntime.HandleError(fmt.Errorf("failed to serve request: No StorageVersion found for the requested GVR: %v", err))
-			responsewriters.ErrorNegotiated(apierrors.NewServiceUnavailable(fmt.Sprintf("wait for storage version registration to complete for resource: %v", gv)), s, gv, w, req)
+			utilruntime.HandleError(fmt.Errorf("failed to serve request: No relevant API server found for the requested GVR: %v", gv))
+			responsewriters.InternalError(w, req, errors.New("no relevant api server found for the requested gvr"))
+			return
 		}
 
-		// proxy the request to one of the serviceableBy's
+		// randomly select an APIServer
+		rand := rand.Intn(len(serviceableBy))
+		apiserverId := serviceableBy[rand]
+
+		// fetch APIServerIdentity Lease object for this apiserver
+		lease, err := cfgCtlr.kubeclientset.CoordinationV1().Leases(metav1.NamespaceSystem).Get(req.Context(), apiserverId, metav1.GetOptions{})
+
+		if err != nil {
+			klog.ErrorS(err, "Error getting apiserver lease")
+			utilruntime.HandleError(fmt.Errorf("failed to serve request: No relevant API server found for the requested GVR: %v", gv))
+			responsewriters.ErrorNegotiated(apierrors.NewServiceUnavailable(fmt.Sprintf("No relevant API server found for the requested GVR: %v", gv)), s, gv, w, req)
+
+		}
+
+		// check if lease is expired, which means that the apiserver that registered this resource has shutdown, serve 503
+		if !isLeaseExpired(lease) {
+			klog.ErrorS(err, "Error getting apiserver lease")
+			utilruntime.HandleError(fmt.Errorf("failed to serve request: No relevant API server found for the requested GVR: %v", gv))
+			responsewriters.ErrorNegotiated(apierrors.NewServiceUnavailable(fmt.Sprintf("No relevant API server found for the requested GVR: %v", gv)), s, gv, w, req)
+
+		}
+
+		// finally proxy
+		hostname := lease.Annotations["hostname"]
+		// TODO: how to get the correct port?
+		port := lease.Annotations["port"]
+
 
 	})
+}
+
+func isLeaseExpired(lease *v1.Lease) bool {
+	currentTime := time.Now()
+	// Leases created by the apiserver lease controller should have non-nil renew time
+	// and lease duration set. Leases without these fields set are invalid and should
+	// be GC'ed.
+	return lease.Spec.RenewTime == nil ||
+			lease.Spec.LeaseDurationSeconds == nil ||
+			lease.Spec.RenewTime.Add(time.Duration(*lease.Spec.LeaseDurationSeconds)*time.Second).Before(currentTime)
 }
 
 type configController struct {
 	name              string // varies in tests of fighting controllers
 	svInformerSynced cache.InformerSynced
 	svLister         apiserverinternallister.StorageVersionLister
+	leaseLister  coordlisters.LeaseLister
+	kubeclientset kubernetes.Interface
 }
 
 func newTestableController(config TestableConfig) *configController {
