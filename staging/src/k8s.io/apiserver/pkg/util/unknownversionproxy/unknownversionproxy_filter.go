@@ -28,8 +28,8 @@ import (
 
 	"k8s.io/api/apiserverinternal/v1alpha1"
 	v1 "k8s.io/api/coordination/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apiv1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -67,13 +67,17 @@ type configController struct {
 func New(
 	informerFactory kubeinformers.SharedInformerFactory,
 ) Interface {
-	return newController(TestableConfig{
+	return NewTestable(TestableConfig{
 		Name:                   "Controller",
 		InformerFactory:        informerFactory,
 	})
 }
 
-func newController(config TestableConfig) *configController {
+// NewTestable is extra flexible to facilitate testing
+func NewTestable(config TestableConfig) Interface {
+	return newTestableController(config)
+}
+func newTestableController(config TestableConfig) *configController {
 	cfgCtlr := &configController{
 		name:                   config.Name,
 	}
@@ -102,7 +106,7 @@ func (cfgCtlr *configController) Handle(handler http.Handler, localAPIServerId s
 
 		storageVersions, err := cfgCtlr.svLister.Get(fmt.Sprintf("%s.%s", requestInfo.APIGroup, requestInfo.Resource))
 		if err != nil {
-			klog.Errorf(fmt.Sprintf("Error retrieving StorageVersions for the GV: %v skipping proxying", gv))
+			klog.Errorf(fmt.Sprintf("Error retrieving StorageVersions for the GV: %v skipping proxying: %v", gv, err))
 			// TODO: confirm actions for this
 			handler.ServeHTTP(w, req)
 			return
@@ -154,8 +158,7 @@ func (cfgCtlr *configController) Handle(handler http.Handler, localAPIServerId s
 
 		// finally proxy
 		hostname := lease.Labels[apiv1.LabelHostname]
-		// TODO: where to store/get port number details?
-		port := lease.Annotations["port"]
+		port := lease.Labels[apiv1.PortHeader]
 
 		err = proxyRequestToDestinationAPIServer(req, w, hostname, port)
 		if err != nil {

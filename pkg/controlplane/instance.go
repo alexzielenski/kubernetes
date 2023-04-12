@@ -497,7 +497,10 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 
 			leaseName := m.GenericAPIServer.APIServerID
 			holderIdentity := m.GenericAPIServer.APIServerID + "_" + string(uuid.NewUUID())
-
+			_, port, err := m.GenericAPIServer.SecureServingInfo.HostPort()
+			if err != nil {
+				return err
+			}
 			controller := lease.NewController(
 				clock.RealClock{},
 				kubeClient,
@@ -508,7 +511,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 				leaseName,
 				metav1.NamespaceSystem,
 				// TODO: receive identity label value as a parameter when post start hook is moved to generic apiserver.
-				labelAPIServerHeartbeatFunc(KubeAPIServer))
+				labelAPIServerHeartbeatFunc(KubeAPIServer, port))
 			go controller.Run(ctx)
 			return nil
 		})
@@ -556,7 +559,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 	return m, nil
 }
 
-func labelAPIServerHeartbeatFunc(identity string) lease.ProcessLeaseFunc {
+func labelAPIServerHeartbeatFunc(identity string, port int) lease.ProcessLeaseFunc {
 	return func(lease *coordinationapiv1.Lease) error {
 		if lease.Labels == nil {
 			lease.Labels = map[string]string{}
@@ -572,17 +575,9 @@ func labelAPIServerHeartbeatFunc(identity string) lease.ProcessLeaseFunc {
 
 		// convenience label to easily map a lease object to a specific apiserver
 		lease.Labels[apiv1.LabelHostname] = hostname
-		addAnnotationsForHostnamePort(lease, hostname)
+		lease.Labels[apiv1.PortHeader] = string(port)
 		return nil
 	}
-}
-
-func addAnnotationsForHostnamePort(lease *coordinationapiv1.Lease, hostname string)  {
-	if lease.Annotations == nil {
-		lease.Annotations = map[string]string{}
-	}
-	lease.Annotations["hostname"] = hostname
-	lease.Annotations["port"] = "443"
 }
 
 // InstallLegacyAPI will install the legacy APIs for the restStorageProviders if they are enabled.
