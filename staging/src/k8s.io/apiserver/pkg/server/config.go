@@ -842,6 +842,20 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		}
 	}
 
+	// Add PostStartHooks for Unknown Version Proxy filter.
+	if c.UnknownVersionProxy != nil {
+		const unknownVersionProxyFilterHookName = "unknown-version-proxy"
+		if !s.isPostStartHookRegistered(unknownVersionProxyFilterHookName) {
+			err := s.AddPostStartHook(unknownVersionProxyFilterHookName, func(context PostStartHookContext) error {
+				err := c.UnknownVersionProxy.WaitForCacheSync(context.StopCh)
+				return err
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Add PostStartHook for maintenaing the object count tracker.
 	if c.StorageObjectCountTracker != nil {
 		const storageObjectCountTrackerHookName = "storage-object-count-tracker-hook"

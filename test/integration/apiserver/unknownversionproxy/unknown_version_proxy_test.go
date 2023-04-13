@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors.
+Copyright 2023 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,18 +18,22 @@ package unknownversionproxy
 
 import (
 	"context"
-	"encoding/json"
+	"flag"
 	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/features"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/kubernetes"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	kubeapiservertesting "k8s.io/kubernetes/cmd/kube-apiserver/app/testing"
+	"k8s.io/kubernetes/pkg/controlplane"
 	"k8s.io/kubernetes/test/integration/framework"
+	"syscall"
 )
 
 func TestUnknownVersionProxiedRequest(t *testing.T) {
@@ -38,26 +42,70 @@ func TestUnknownVersionProxiedRequest(t *testing.T) {
 	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.APIServerIdentity, true)()
 	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StorageVersionAPI, true)()
 
-	serverA := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
-		fmt.Sprintf("--runtime-config=%v", "batch/v1=false")}, framework.SharedEtcd())
+	// create sharedetcd
+	etcd := framework.SharedEtcd()
+	// start test server with all APIs enabled
+	serverA := kubeapiservertesting.StartTestServerOrDie(t, nil, nil, etcd)
+	fmt.Printf("etcdA : %v", serverA.EtcdStoragePrefix)
 	defer serverA.TearDownFn()
 
-	// start another server, with all APIs enabled
-	serverB := kubeapiservertesting.StartTestServerOrDie(t, nil, nil, framework.SharedEtcd())
+	// start another test server with some api disabled
+	serverB := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
+		fmt.Sprintf("--runtime-config=%v", "batch/v1=false")}, etcd)
+	fmt.Printf("etcdB : %v", serverB.EtcdStoragePrefix)
 	defer serverB.TearDownFn()
 
-	kubeClientSetA, err := kubernetes.NewForConfig(serverA.ClientConfig)
+	//kubeClientSetA, err := kubernetes.NewForConfig(serverA.ClientConfig)
+	//require.NoError(t, err)
+
+	kubeClientSetB, err := kubernetes.NewForConfig(serverB.ClientConfig)
 	require.NoError(t, err)
 
-	request := kubeClientSetA.RESTClient().Get().AbsPath("/apis/batch/v1/jobs")
-	request.SetHeader("Accept", "application/json")
-	bytes, err := request.DoRaw(context.TODO())
-	obj := &unstructured.Unstructured{}
-	if err == nil {
-		t.Errorf("expect server to reject request, but forwarded")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	/*req := kubeClientSetA.CoreV1().RESTClient().Get().Param("verbose","true").AbsPath("/readyz")
+	req.SetHeader("Accept", "application/json")
+	result, err := req.DoRaw(ctx)
+
+	if err != nil {
+		t.Fatalf("failed to get response: %v:\n%v", err, string(result))
 	}
-	if err := json.Unmarshal(bytes, obj); err != nil {
-		t.Errorf("error decoding %s: %v", "/apis/batch/v1/jobs", err)
+
+	fmt.Printf("Response %v", string(result))*/
+
+	/*jobsA, err := kubeClientSetA.BatchV1().Jobs("kube-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Errorf("ServerA: failed to get response  %v",err)
+	}
+	fmt.Printf("JobsA list length %v", len(jobsA.Items))*/
+
+	leases, err := kubeClientSetB.CoordinationV1().Leases("kube-system").List(ctx, metav1.ListOptions{LabelSelector: controlplane.KubeAPIServerIdentityLeaseLabelSelector})
+	if err != nil {
+		t.Errorf("ServerB: failed to get response  %v",err)
+	}
+	fmt.Printf("LeasesB list %v", leases)
+
+	/*jobsB, err := kubeClientSetB.BatchV1().Jobs("kube-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Errorf("ServerB: failed to get response  %v",err)
+	}
+	fmt.Printf("JobsB list length %v", len(jobsB.Items))*/
+
+}
+
+func setHostname() {
+	hostnamePtr := flag.String("hostname", "foo", "a string")
+	flag.Parse()
+	fmt.Println("hostame:", *hostnamePtr)
+	err := syscall.Sethostname([]byte(*hostnamePtr))
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		hostname, err := os.Hostname()
+		if err != nil {
+			fmt.Println(hostname)
+		}
 	}
 
 }

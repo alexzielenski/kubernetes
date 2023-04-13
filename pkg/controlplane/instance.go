@@ -575,7 +575,7 @@ func labelAPIServerHeartbeatFunc(identity string, port int) lease.ProcessLeaseFu
 
 		// convenience label to easily map a lease object to a specific apiserver
 		lease.Labels[apiv1.LabelHostname] = hostname
-		lease.Labels[apiv1.PortHeader] = string(port)
+		lease.Labels[apiv1.PortHeader] = strconv.Itoa(port)
 		return nil
 	}
 }
