@@ -545,6 +545,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	}
 
 	response, err := rt.delegatedRoundTripper.RoundTrip(req)
+	klog.Infof("RICHAAAA request : %v \n response : %v", req, response)
 	reqInfo.Duration = time.Since(startTime)
 
 	reqInfo.complete(response, err)

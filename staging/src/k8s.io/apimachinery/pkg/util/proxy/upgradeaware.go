@@ -290,6 +290,7 @@ func (h *UpgradeAwareHandler) ServeHTTP(w http.ResponseWriter, req *http.Request
 		// or supporting retry mechanisms by not sending non-fatal errors to the clients
 		proxy.ErrorHandler = h.Responder.Error
 	}
+	klog.Infof("uvip upgrade aware: Proxying old request:  \n %v to  new request: \n %v",req,newReq)
 	proxy.ServeHTTP(w, newReq)
 }
 

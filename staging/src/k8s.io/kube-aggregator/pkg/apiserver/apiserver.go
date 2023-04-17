@@ -35,6 +35,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/version"
+	"k8s.io/klog/v2"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
@@ -332,12 +333,15 @@ func (c completedConfig) NewWithDelegate(delegationTarget genericapiserver.Deleg
 			// Wait for apiserver-identity to exist first before updating storage
 			// versions, to avoid storage version GC accidentally garbage-collecting
 			// storage versions.
+			klog.Infof("Starting storageversion poststarthook")
 			kubeClient, err := kubernetes.NewForConfig(hookContext.LoopbackClientConfig)
 			if err != nil {
 				return err
 			}
-			if err := wait.PollImmediateUntil(100*time.Millisecond, func() (bool, error) {
-				_, err := kubeClient.CoordinationV1().Leases(metav1.NamespaceSystem).Get(
+			if err := wait.PollImmediateUntil(1000*time.Millisecond, func() (bool, error) {
+				leaselist, err :=kubeClient.CoordinationV1().Leases(metav1.NamespaceSystem).List(context.TODO(), metav1.ListOptions{})
+				klog.Infof("uvip: Found leases: ", leaselist)
+				_, err = kubeClient.CoordinationV1().Leases(metav1.NamespaceSystem).Get(
 					context.TODO(), s.GenericAPIServer.APIServerID, metav1.GetOptions{})
 				if apierrors.IsNotFound(err) {
 					return false, nil

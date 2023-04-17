@@ -497,7 +497,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 
 			leaseName := m.GenericAPIServer.APIServerID
 			holderIdentity := m.GenericAPIServer.APIServerID + "_" + string(uuid.NewUUID())
-			_, port, err := m.GenericAPIServer.SecureServingInfo.HostPort()
+			host, port, err := m.GenericAPIServer.SecureServingInfo.HostPort()
 			if err != nil {
 				return err
 			}
@@ -511,7 +511,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 				leaseName,
 				metav1.NamespaceSystem,
 				// TODO: receive identity label value as a parameter when post start hook is moved to generic apiserver.
-				labelAPIServerHeartbeatFunc(KubeAPIServer, port))
+				labelAPIServerHeartbeatFunc(KubeAPIServer, host, port))
 			go controller.Run(ctx)
 			return nil
 		})
@@ -559,7 +559,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 	return m, nil
 }
 
-func labelAPIServerHeartbeatFunc(identity string, port int) lease.ProcessLeaseFunc {
+func labelAPIServerHeartbeatFunc(identity string, host string, port int) lease.ProcessLeaseFunc {
 	return func(lease *coordinationapiv1.Lease) error {
 		if lease.Labels == nil {
 			lease.Labels = map[string]string{}
@@ -575,6 +575,7 @@ func labelAPIServerHeartbeatFunc(identity string, port int) lease.ProcessLeaseFu
 
 		// convenience label to easily map a lease object to a specific apiserver
 		lease.Labels[apiv1.LabelHostname] = hostname
+		lease.Labels["listener-host"] = host
 		lease.Labels[apiv1.PortHeader] = strconv.Itoa(port)
 		return nil
 	}

@@ -378,7 +378,8 @@ func NewConfig(codecs serializer.CodecFactory) *Config {
 		// post start hook is moved to generic apiserver.
 		b := cryptobyte.NewBuilder(nil)
 		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-			b.AddBytes([]byte(hostname))
+			randStr := uuid.New().String()[0:4]
+			b.AddBytes([]byte(fmt.Sprintf("%s-%s",randStr,hostname)))
 		})
 		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 			b.AddBytes([]byte("kube-apiserver"))
