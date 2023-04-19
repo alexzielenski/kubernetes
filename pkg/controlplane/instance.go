@@ -497,9 +497,17 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 
 			leaseName := m.GenericAPIServer.APIServerID
 			holderIdentity := m.GenericAPIServer.APIServerID + "_" + string(uuid.NewUUID())
-			host, port, err := m.GenericAPIServer.SecureServingInfo.HostPort()
+			host, port, err := net.SplitHostPort(c.GenericConfig.ExternalAddress)
 			if err != nil {
 				return err
+			}
+			portInt, err := strconv.Atoi(port)
+			if err != nil {
+				return err
+			}
+
+			if c.GenericConfig.UnknownVersionProxy != nil {
+				c.GenericConfig.UnknownVersionProxy.SetSAI(c.ExtraConfig.ServiceAccountIssuer)
 			}
 			controller := lease.NewController(
 				clock.RealClock{},
@@ -511,7 +519,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 				leaseName,
 				metav1.NamespaceSystem,
 				// TODO: receive identity label value as a parameter when post start hook is moved to generic apiserver.
-				labelAPIServerHeartbeatFunc(KubeAPIServer, host, port))
+				labelAPIServerHeartbeatFunc(KubeAPIServer, host, portInt))
 			go controller.Run(ctx)
 			return nil
 		})

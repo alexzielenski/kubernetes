@@ -367,7 +367,7 @@ func StartTestServerOrDie(t Logger, instanceOptions *TestServerInstanceOptions, 
 }
 
 func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		return nil, 0, err
 	}

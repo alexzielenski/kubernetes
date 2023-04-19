@@ -50,6 +50,7 @@ import (
 	"k8s.io/apiserver/pkg/server/filters"
 	serveroptions "k8s.io/apiserver/pkg/server/options"
 	serverstorage "k8s.io/apiserver/pkg/server/storage"
+	"k8s.io/apiserver/pkg/storageversion"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	utilflowcontrol "k8s.io/apiserver/pkg/util/flowcontrol"
 	"k8s.io/apiserver/pkg/util/notfoundhandler"
@@ -477,7 +478,7 @@ func buildGenericConfig(
 		genericConfig.FlowControl, lastErr = BuildPriorityAndFairness(s, clientgoExternalClient, versionedInformers)
 	}
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIServerIdentity) && utilfeature.DefaultFeatureGate.Enabled(genericfeatures.StorageVersionAPI) {
-		genericConfig.UnknownVersionProxy, lastErr = BuildUnknownVersionProxy(versionedInformers)
+		genericConfig.UnknownVersionProxy, lastErr = BuildUnknownVersionProxy(versionedInformers, genericConfig.StorageVersionManager)
 	}
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.AggregatedDiscoveryEndpoint) {
 		genericConfig.AggregatedDiscoveryGroupManager = aggregated.NewResourceManager("apis")
@@ -514,9 +515,10 @@ func BuildPriorityAndFairness(s *options.ServerRunOptions, extclient clientgocli
 	), nil
 }
 
-func BuildUnknownVersionProxy(versionedInformer clientgoinformers.SharedInformerFactory) (utilunknownversionproxy.Interface, error) {
+func BuildUnknownVersionProxy(versionedInformer clientgoinformers.SharedInformerFactory, svm storageversion.Manager) (utilunknownversionproxy.Interface, error) {
 	return utilunknownversionproxy.New(
 		versionedInformer,
+		svm,
 	), nil
 }
 

@@ -66,6 +66,9 @@ type DelegatingAuthenticatorConfig struct {
 }
 
 func (c DelegatingAuthenticatorConfig) New() (authenticator.Request, *spec.SecurityDefinitions, error) {
+	if c.Anonymous {
+		return anonymous.NewAuthenticator(), nil, nil
+	}
 	authenticators := []authenticator.Request{}
 	securityDefinitions := spec.SecurityDefinitions{}
 

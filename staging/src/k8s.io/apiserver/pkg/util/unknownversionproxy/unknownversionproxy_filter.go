@@ -43,6 +43,7 @@ import (
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
+	"k8s.io/apiserver/pkg/storageversion"
 	kubeinformers "k8s.io/client-go/informers"
 	apiserverinternallister "k8s.io/client-go/listers/apiserverinternal/v1alpha1"
 	coordlisters "k8s.io/client-go/listers/coordination/v1"
@@ -50,6 +51,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/transport"
 	"k8s.io/klog/v2"
+	"k8s.io/kubernetes/pkg/serviceaccount"
 )
 
 const (
@@ -66,9 +68,11 @@ type TestableConfig struct {
 	Name string
 
 	// InformerFactory to use in building the controller
-	InformerFactory kubeinformers.SharedInformerFactory
-	CertProvider dynamiccertificates.CertKeyContentProvider
+	InformerFactory   kubeinformers.SharedInformerFactory
+	CertProvider      dynamiccertificates.CertKeyContentProvider
 	CaContentProvider dynamiccertificates.CAContentProvider
+
+	StorageVersionManager storageversion.Manager
 }
 
 type uvipHandler struct {
@@ -77,15 +81,19 @@ type uvipHandler struct {
 	leaseLister coordlisters.LeaseLister
 	svi         cache.SharedIndexInformer
 	leasei      cache.SharedIndexInformer
+	svm         storageversion.Manager
+	sai         serviceaccount.TokenGenerator
 }
 
 // New creates a new instance to implement API server proxy
 func New(
 	informerFactory kubeinformers.SharedInformerFactory,
+	svm storageversion.Manager,
 ) Interface {
 	return NewTestable(TestableConfig{
-		Name:            "Controller",
-		InformerFactory: informerFactory,
+		Name:                  "Controller",
+		InformerFactory:       informerFactory,
+		StorageVersionManager: svm,
 	})
 }
 
@@ -96,6 +104,7 @@ func NewTestable(config TestableConfig) Interface {
 func newTestableController(config TestableConfig) *uvipHandler {
 	cfgCtlr := &uvipHandler{
 		name: config.Name,
+		svm:  config.StorageVersionManager,
 	}
 	finishedSync.Store(false)
 	svi := config.InformerFactory.Internal().V1alpha1().StorageVersions()
@@ -112,6 +121,11 @@ type Interface interface {
 	WaitForCacheSync(stopCh <-chan struct{}) error
 	Handle(handler http.Handler, localAPIServerId string, s runtime.NegotiatedSerializer) http.Handler
 	HasFinishedSync() bool
+	SetSAI(serviceaccount.TokenGenerator)
+}
+
+func (cfgCtlr *uvipHandler) SetSAI(sai serviceaccount.TokenGenerator) {
+	cfgCtlr.sai = sai
 }
 
 func (cfgCtlr *uvipHandler) HasFinishedSync() bool {
@@ -121,7 +135,7 @@ func (cfgCtlr *uvipHandler) HasFinishedSync() bool {
 func (cfgCtlr *uvipHandler) WaitForCacheSync(stopCh <-chan struct{}) error {
 
 	klog.Info("uvip: Starting API Unknown Version Proxy poststarthook")
-	ok := cache.WaitForNamedCacheSync("unknown-version-proxy",stopCh, cfgCtlr.svi.HasSynced, cfgCtlr.leasei.HasSynced)
+	ok := cache.WaitForNamedCacheSync("unknown-version-proxy", stopCh, cfgCtlr.svi.HasSynced, cfgCtlr.leasei.HasSynced, cfgCtlr.svm.Completed)
 	if !ok {
 		return fmt.Errorf("uvip: Error while waiting for initial cache sync")
 	}
@@ -159,7 +173,7 @@ func (cfgHandler *uvipHandler) Handle(handler http.Handler, localAPIServerId str
 			return
 		}
 
-		if (requestInfo.APIGroup == "coordination.k8s.io" && requestInfo.Resource=="leases") || (requestInfo.APIGroup == "internal.apiserver.k8s.io" && requestInfo.Resource=="storageversions") {
+		if (requestInfo.APIGroup == "coordination.k8s.io" && requestInfo.Resource == "leases") || (requestInfo.APIGroup == "internal.apiserver.k8s.io" && requestInfo.Resource == "storageversions") {
 			handler.ServeHTTP(w, req)
 			return
 		}
@@ -169,7 +183,6 @@ func (cfgHandler *uvipHandler) Handle(handler http.Handler, localAPIServerId str
 		}
 		gv.Group = requestInfo.APIGroup
 		gv.Version = requestInfo.APIVersion
-		klog.Infof("uvip: Handler started for request group: %v version: %v resource: %v",requestInfo.APIGroup, requestInfo.APIVersion, requestInfo.Resource)
 
 		/*svList, err := cfgHandler.svLister.List(labels.Everything())
 		if err != nil {
@@ -194,7 +207,6 @@ func (cfgHandler *uvipHandler) Handle(handler http.Handler, localAPIServerId str
 			return
 		}
 
-		klog.Infof("uvip: local serverId %v", localAPIServerId)
 		serviceableByResp := findServiceableByServers(storageVersions, requestInfo, localAPIServerId)
 		// found the gvr locally, pass handler as it is
 		if serviceableByResp.locallyServiceable {
@@ -218,7 +230,6 @@ func (cfgHandler *uvipHandler) Handle(handler http.Handler, localAPIServerId str
 
 		// fetch APIServerIdentity Lease object for this apiserver
 		lease, err := cfgHandler.leaseLister.Leases(metav1.NamespaceSystem).Get(apiserverId)
-		klog.Infof("uvip: found lease %v", lease)
 
 		if err != nil {
 			klog.ErrorS(err, "uvip: Error getting apiserver lease")
@@ -234,12 +245,20 @@ func (cfgHandler *uvipHandler) Handle(handler http.Handler, localAPIServerId str
 			return
 		}
 
+		klog.Infof("uvip: Handler started for request group: %v version: %v resource: %v", requestInfo.APIGroup, requestInfo.APIVersion, requestInfo.Resource)
+
 		// finally proxy
 		//hostname := lease.Labels[apiv1.LabelHostname]
 		hostname := lease.Labels["listener-host"]
 		port := lease.Labels[apiv1.PortHeader]
 
-		err = proxyRequestToDestinationAPIServer(req, w, hostname, port, lease)
+		// sc, pc := token.Claims(*svcacct, nil, nil, 5*time.Minute, 2*time.Minute, req.Spec.Audiences)
+		// tok, err := cfgHandler.sai.GenerateToken(sc, pc)
+		// if err != nil {
+		// 	klog.ErrorS(err, "uvip: error generating bearer token")
+		// 	responsewriters.ErrorNegotiated(apierrors.NewServiceUnavailable(fmt.Sprintf("error generating bearer token: %v, err: %v", gv, err)), s, gv, w, req)
+		// }
+		err = proxyRequestToDestinationAPIServer(req, w, hostname, port, lease, "")
 		if err != nil {
 			klog.ErrorS(err, "uvip: Error proxying request for the requested GVR")
 			responsewriters.ErrorNegotiated(apierrors.NewServiceUnavailable(fmt.Sprintf("Error proxying request for the requested GVR: %v, err: %v", gv, err)), s, gv, w, req)
@@ -268,11 +287,11 @@ func findServiceableByServers(storageVersions *v1alpha1.StorageVersion, requestI
 			}
 		}
 	}
-	klog.Infof("uvip: Found these api server lease objects: %v",serviceableBy)
+	klog.Infof("uvip: Found these api server lease objects: %v", serviceableBy)
 	return serviceableByResponse{serviceableBy: serviceableBy}
 }
 
-func proxyRequestToDestinationAPIServer(req *http.Request, w http.ResponseWriter, hostname string, port string, lease *v1.Lease) error {
+func proxyRequestToDestinationAPIServer(req *http.Request, w http.ResponseWriter, hostname string, port string, lease *v1.Lease, tok string) error {
 	user, ok := genericapirequest.UserFrom(req.Context())
 	if !ok {
 		return fmt.Errorf("RICHA error finding user info")
@@ -288,10 +307,14 @@ func proxyRequestToDestinationAPIServer(req *http.Request, w http.ResponseWriter
 	newReq, cancelFn := newRequestForProxy(location, req)
 	defer cancelFn()
 
+	if len(tok) > 0 {
+		newReq.Header.Add("Authorization", "Bearer "+tok)
+	}
+
 	// create transport
 	clientConfig := &restclient.Config{
 		TLSClientConfig: restclient.TLSClientConfig{
-			Insecure:   true,
+			Insecure: true,
 		},
 	}
 
@@ -302,13 +325,15 @@ func proxyRequestToDestinationAPIServer(req *http.Request, w http.ResponseWriter
 	}
 
 	klog.Infof("RICHHAAA user info %v", user)
-	proxyRoundTripper = transport.NewAuthProxyRoundTripper(user.GetName(), user.GetGroups(), user.GetExtra(), proxyRoundTripper)
+	proxyRoundTripper = transport.NewAuthProxyRoundTripper("system:anomymous", []string{"system:unauthenticated"}, nil, proxyRoundTripper)
 
-	handler := proxy.NewUpgradeAwareHandler(location, proxyRoundTripper, true, false, &responder{w: w})
+	resp := &responder{w: w}
+	handler := proxy.NewUpgradeAwareHandler(location, proxyRoundTripper, true, false, resp)
 
-	klog.Infof("uvip: Proxying old request:  \n %v to  new request: \n %v",req,newReq)
+	klog.Infof("uvip: Proxying old request:  \n %v to  new request: \n %v", req, newReq)
+
 	handler.ServeHTTP(w, newReq)
-	return nil
+	return resp.e
 }
 
 func normalizeLocation(location *url.URL) *url.URL {
@@ -359,6 +384,7 @@ func newRequestForProxy(location *url.URL, req *http.Request) (*http.Request, co
 // responder implements rest.Responder for assisting a connector in writing objects or errors.
 type responder struct {
 	w http.ResponseWriter
+	e error
 }
 
 // TODO this should properly handle content type negotiation
@@ -370,6 +396,7 @@ func (r *responder) Object(statusCode int, obj runtime.Object) {
 func (r *responder) Error(w http.ResponseWriter, req *http.Request, err error) {
 	klog.Errorf("Error while proxying request: %v", err)
 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	r.e = err
 }
 
 type serviceableByResponse struct {
