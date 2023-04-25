@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
@@ -599,6 +600,106 @@ func getManagedFields(rawResponse []byte) ([]metav1.ManagedFieldsEntry, error) {
 		return nil, err
 	}
 	return obj.GetManagedFields(), nil
+}
+
+// Applying {} to a non-required field owned by another field manager should be
+// accepted
+// https://github.com/kubernetes/kubernetes/issues/117447
+func TestEmptyOwnership(t *testing.T) {
+	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, framework.SharedEtcd())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.TearDownFn()
+
+	apiExtensionClient, err := clientset.NewForConfig(server.ClientConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dynamicClient, err := dynamic.NewForConfig(server.ClientConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	noxuDefinition := fixtures.NewNoxuV1CustomResourceDefinition(apiextensionsv1.ClusterScoped)
+	err = json.Unmarshal([]byte(`{
+		"openAPIV3Schema": {
+			"type": "object",
+			"properties": {
+				"spec": {
+					"type": "object",
+					"properties": {
+						"x": {
+							"type": "string"
+						}
+					}
+				}
+			}
+		}
+	}`), &noxuDefinition.Spec.Versions[0].Schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noxuDefinition, err = fixtures.CreateNewV1CustomResourceDefinition(noxuDefinition, apiExtensionClient, dynamicClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    noxuDefinition.Spec.Group,
+		Version:  noxuDefinition.Spec.Versions[0].Name,
+		Resource: noxuDefinition.Spec.Names.Plural,
+	}
+
+	_, err = dynamicClient.Resource(gvr).Apply(context.TODO(), "t", &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": gvr.GroupVersion().String(),
+			"kind":       noxuDefinition.Spec.Names.Kind,
+			"metadata": map[string]interface{}{
+				"name": "t",
+			},
+			"spec": map[string]interface{}{},
+		},
+	}, metav1.ApplyOptions{
+		FieldManager: "mgr",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = dynamicClient.Resource(gvr).Apply(context.TODO(), "t", &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": gvr.GroupVersion().String(),
+			"kind":       noxuDefinition.Spec.Names.Kind,
+			"metadata": map[string]interface{}{
+				"name": "t",
+			},
+			"spec": map[string]interface{}{
+				"x": "xoxo",
+			},
+		},
+	}, metav1.ApplyOptions{
+		FieldManager: "mgr",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = dynamicClient.Resource(gvr).Apply(context.TODO(), "t", &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": gvr.GroupVersion().String(),
+			"kind":       noxuDefinition.Spec.Names.Kind,
+			"metadata": map[string]interface{}{
+				"name": "t",
+			},
+			"spec": map[string]interface{}{},
+		},
+	}, metav1.ApplyOptions{
+		FieldManager: "mgr",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestDefaultMissingKeyCRD(t *testing.T) {
