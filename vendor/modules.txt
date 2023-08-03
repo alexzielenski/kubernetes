@@ -1051,6 +1051,7 @@ golang.org/x/time/rate
 golang.org/x/tools/benchmark/parse
 golang.org/x/tools/cmd/stringer
 golang.org/x/tools/container/intsets
+golang.org/x/tools/cover
 golang.org/x/tools/go/ast/astutil
 golang.org/x/tools/go/ast/inspector
 golang.org/x/tools/go/gcexportdata
