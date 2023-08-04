@@ -27,3 +27,5 @@ replace (
 	k8s.io/client-go => ../../../../client-go
 	k8s.io/kms => ../../../../kms
 )
+
+replace k8s.io/gengo => /Users/alex/go/src/k8s.io/gengo

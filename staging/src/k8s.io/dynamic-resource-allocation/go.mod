@@ -64,5 +64,6 @@ replace (
 	k8s.io/component-base => ../component-base
 	k8s.io/cri-api => ../cri-api
 	k8s.io/dynamic-resource-allocation => ../dynamic-resource-allocation
+	k8s.io/gengo => /Users/alex/go/src/k8s.io/gengo
 	k8s.io/kubelet => ../kubelet
 )

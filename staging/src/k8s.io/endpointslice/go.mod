@@ -69,4 +69,5 @@ replace (
 	k8s.io/client-go => ../client-go
 	k8s.io/component-base => ../component-base
 	k8s.io/endpointslice => ../endpointslice
+	k8s.io/gengo => /Users/alex/go/src/k8s.io/gengo
 )

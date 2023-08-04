@@ -102,6 +102,7 @@ replace (
 	k8s.io/component-base => ../component-base
 	k8s.io/component-helpers => ../component-helpers
 	k8s.io/controller-manager => ../controller-manager
+	k8s.io/gengo => /Users/alex/go/src/k8s.io/gengo
 	k8s.io/kms => ../kms
 	k8s.io/legacy-cloud-providers => ../legacy-cloud-providers
 )

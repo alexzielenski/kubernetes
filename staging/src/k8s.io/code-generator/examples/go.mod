@@ -55,3 +55,5 @@ replace (
 	k8s.io/apimachinery => ../../apimachinery
 	k8s.io/client-go => ../../client-go
 )
+
+replace k8s.io/gengo => /Users/alex/go/src/k8s.io/gengo
