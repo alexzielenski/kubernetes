@@ -1,6 +1,8 @@
 package main
 
 import (
+	"path/filepath"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
@@ -48,7 +50,8 @@ func resolveProperty(sch *spec.Schema, defs map[string]*spec.Schema) *spec.Schem
 	if ref := refOfSchema(sch); len(ref) == 0 {
 		return sch
 	} else {
-		if existing, exists := defs[ref]; exists {
+		lastPart := filepath.Base(ref)
+		if existing, exists := defs[lastPart]; exists {
 			return existing
 		} else {
 			// error?
