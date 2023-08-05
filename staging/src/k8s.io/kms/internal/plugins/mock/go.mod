@@ -29,3 +29,5 @@ replace (
 )
 
 replace k8s.io/gengo => /Users/alex/go/src/k8s.io/gengo
+
+replace k8s.io/kube-openapi => /Users/Alex/go/src/k8s.io/kube-openapi/

@@ -48,5 +48,6 @@ replace (
 	k8s.io/apimachinery => ../apimachinery
 	k8s.io/client-go => ../client-go
 	k8s.io/component-base => ../component-base
+	k8s.io/kube-openapi => /Users/Alex/go/src/k8s.io/kube-openapi/
 	k8s.io/kube-proxy => ../kube-proxy
 )

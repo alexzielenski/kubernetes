@@ -41,4 +41,5 @@ replace (
 	k8s.io/controller-manager => ../controller-manager
 	k8s.io/kms => ../kms
 	k8s.io/kube-controller-manager => ../kube-controller-manager
+	k8s.io/kube-openapi => /Users/Alex/go/src/k8s.io/kube-openapi/
 )

@@ -8,7 +8,7 @@ require (
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v0.0.0
-	k8s.io/kube-openapi v0.0.0-20230717233707-2695361300d9
+	k8s.io/kube-openapi v0.0.0
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3
 )
 
@@ -57,3 +57,5 @@ replace (
 )
 
 replace k8s.io/gengo => /Users/alex/go/src/k8s.io/gengo
+
+replace k8s.io/kube-openapi => /Users/Alex/go/src/k8s.io/kube-openapi/
