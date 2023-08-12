@@ -195,20 +195,18 @@ func processSpec(openAPISpecDir string) error {
 		aGVK := sortedGroupVerisionKinds[a]
 		bGVK := sortedGroupVerisionKinds[b]
 
-		if aGVK.Group == "" {
-			return true
-		} else if bGVK.Group == "" {
-			return false
-		} else if aGVK.Group < bGVK.Group {
-			return true
-		} else if aGVK.Group > bGVK.Group {
-			return false
+		if aGVK.Group != bGVK.Group {
+			if aGVK.Group == "" {
+				return true
+			} else if bGVK.Group == "" {
+				return false
+			}
+
+			return aGVK.Group < bGVK.Group
 		}
 
-		if aGVK.Version < bGVK.Version {
-			return true
-		} else if aGVK.Version > bGVK.Version {
-			return false
+		if aGVK.Version != bGVK.Version {
+			return aGVK.Version < bGVK.Version
 		}
 
 		return aGVK.Kind < bGVK.Kind
