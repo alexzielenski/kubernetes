@@ -345,6 +345,7 @@ type PersistentVolumeSpec struct {
 	// Recycle must be supported by the volume plugin underlying this PersistentVolume.
 	// More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#reclaiming
 	// +optional
+	// +default=ref(PersistentVolumeReclaimRetain)
 	PersistentVolumeReclaimPolicy PersistentVolumeReclaimPolicy `json:"persistentVolumeReclaimPolicy,omitempty" protobuf:"bytes,5,opt,name=persistentVolumeReclaimPolicy,casttype=PersistentVolumeReclaimPolicy"`
 	// storageClassName is the name of StorageClass to which this persistent volume belongs. Empty value
 	// means that this volume does not belong to any StorageClass.
@@ -403,6 +404,7 @@ type PersistentVolumeStatus struct {
 	// phase indicates if a volume is available, bound to a claim, or released by a claim.
 	// More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#phase
 	// +optional
+	// +default=ref(VolumePending)
 	Phase PersistentVolumePhase `json:"phase,omitempty" protobuf:"bytes,1,opt,name=phase,casttype=PersistentVolumePhase"`
 	// message is a human-readable message indicating details about why the volume is in this state.
 	// +optional
@@ -497,6 +499,7 @@ type PersistentVolumeClaimSpec struct {
 	// volumeMode defines what type of volume is required by the claim.
 	// Value of Filesystem is implied when not included in claim spec.
 	// +optional
+	// +default=ref(PersistentVolumeFilesystem)
 	VolumeMode *PersistentVolumeMode `json:"volumeMode,omitempty" protobuf:"bytes,6,opt,name=volumeMode,casttype=PersistentVolumeMode"`
 	// dataSource field can be used to specify either:
 	// * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot)
@@ -611,6 +614,7 @@ type PersistentVolumeClaimCondition struct {
 type PersistentVolumeClaimStatus struct {
 	// phase represents the current phase of PersistentVolumeClaim.
 	// +optional
+	// +default=ref(ClaimPending)
 	Phase PersistentVolumeClaimPhase `json:"phase,omitempty" protobuf:"bytes,1,opt,name=phase,casttype=PersistentVolumeClaimPhase"`
 	// accessModes contains the actual access modes the volume backing the PVC has.
 	// More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1
@@ -3329,6 +3333,7 @@ type PodSpec struct {
 	// Default to Always.
 	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy
 	// +optional
+	// +default=ref(RestartPolicyAlways)
 	RestartPolicy RestartPolicy `json:"restartPolicy,omitempty" protobuf:"bytes,3,opt,name=restartPolicy,casttype=RestartPolicy"`
 	// Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request.
 	// Value must be non-negative integer. The value zero indicates stop immediately via
@@ -3339,6 +3344,7 @@ type PodSpec struct {
 	// Set this value longer than the expected cleanup time for your process.
 	// Defaults to 30 seconds.
 	// +optional
+	// +default=ref(DefaultTerminationGracePeriodSeconds)
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty" protobuf:"varint,4,opt,name=terminationGracePeriodSeconds"`
 	// Optional duration in seconds the pod may be active on the node relative to
 	// StartTime before the system will actively try to mark it failed and kill associated containers.
@@ -3352,6 +3358,7 @@ type PodSpec struct {
 	// To have DNS options set along with hostNetwork, you have to specify DNS policy
 	// explicitly to 'ClusterFirstWithHostNet'.
 	// +optional
+	// +default=ref(DNSClusterFirst)
 	DNSPolicy DNSPolicy `json:"dnsPolicy,omitempty" protobuf:"bytes,6,opt,name=dnsPolicy,casttype=DNSPolicy"`
 	// NodeSelector is a selector which must be true for the pod to fit on a node.
 	// Selector which must match a node's labels for the pod to be scheduled on that node.
@@ -3405,6 +3412,7 @@ type PodSpec struct {
 	// SecurityContext holds pod-level security attributes and common container settings.
 	// Optional: Defaults to empty.  See type description for default values of each field.
 	// +optional
+	// +default={}
 	SecurityContext *PodSecurityContext `json:"securityContext,omitempty" protobuf:"bytes,14,opt,name=securityContext"`
 	// ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec.
 	// If specified, these secrets will be passed to individual puller implementations for them to use.
@@ -3427,6 +3435,7 @@ type PodSpec struct {
 	// If specified, the pod will be dispatched by specified scheduler.
 	// If not specified, the pod will be dispatched by default scheduler.
 	// +optional
+	// +default=ref(DefaultSchedulerName)
 	SchedulerName string `json:"schedulerName,omitempty" protobuf:"bytes,19,opt,name=schedulerName"`
 	// If specified, the pod's tolerations.
 	// +optional
@@ -4416,6 +4425,7 @@ type ReplicationControllerSpec struct {
 	// This is a pointer to distinguish between explicit zero and unspecified.
 	// Defaults to 1.
 	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller
+	// +default=1
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
 
@@ -4831,6 +4841,7 @@ type ServiceSpec struct {
 	// Several other fields do not apply to ExternalName services.
 	// More info: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
 	// +optional
+	// +default=ref(ServiceTypeClusterIP)
 	Type ServiceType `json:"type,omitempty" protobuf:"bytes,4,opt,name=type,casttype=ServiceType"`
 
 	// externalIPs is a list of IP addresses for which nodes in the cluster
@@ -4847,6 +4858,7 @@ type ServiceSpec struct {
 	// Defaults to None.
 	// More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies
 	// +optional
+	// +default=ref(ServiceAffinityNone)
 	SessionAffinity ServiceAffinity `json:"sessionAffinity,omitempty" protobuf:"bytes,7,opt,name=sessionAffinity,casttype=ServiceAffinity"`
 
 	// Only applies to Service Type: LoadBalancer.
@@ -4984,6 +4996,7 @@ type ServiceSpec struct {
 	// "Cluster", uses the standard behavior of routing to all endpoints evenly
 	// (possibly modified by topology and other features).
 	// +optional
+	// +default=ref(ServiceInternalTrafficPolicyCluster)
 	InternalTrafficPolicy *ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty" protobuf:"bytes,22,opt,name=internalTrafficPolicy"`
 }
 
@@ -5760,6 +5773,7 @@ type NamespaceStatus struct {
 	// Phase is the current lifecycle phase of the namespace.
 	// More info: https://kubernetes.io/docs/tasks/administer-cluster/namespaces/
 	// +optional
+	// +default=ref(NamespaceActive)
 	Phase NamespacePhase `json:"phase,omitempty" protobuf:"bytes,1,opt,name=phase,casttype=NamespacePhase"`
 
 	// Represents the latest available observations of a namespace's current state.
@@ -6552,6 +6566,7 @@ type Secret struct {
 	// Used to facilitate programmatic handling of secret data.
 	// More info: https://kubernetes.io/docs/concepts/configuration/secret/#secret-types
 	// +optional
+	// +default=ref(SecretTypeOpaque)
 	Type SecretType `json:"type,omitempty" protobuf:"bytes,3,opt,name=type,casttype=SecretType"`
 }
 
@@ -6681,6 +6696,7 @@ type ConfigMap struct {
 	// The keys stored in Data must not overlap with the keys in
 	// the BinaryData field, this is enforced during validation process.
 	// +optional
+	// +default={}
 	Data map[string]string `json:"data,omitempty" protobuf:"bytes,2,rep,name=data"`
 
 	// BinaryData contains the binary data.

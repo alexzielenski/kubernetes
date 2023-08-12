@@ -182,6 +182,7 @@ type ValidatingAdmissionPolicySpec struct {
 	//
 	// Allowed values are Ignore or Fail. Defaults to Fail.
 	// +optional
+	// +default=ref(Fail)
 	FailurePolicy *FailurePolicyType `json:"failurePolicy,omitempty" protobuf:"bytes,4,opt,name=failurePolicy,casttype=FailurePolicyType"`
 
 	// auditAnnotations contains CEL expressions which are used to produce audit
