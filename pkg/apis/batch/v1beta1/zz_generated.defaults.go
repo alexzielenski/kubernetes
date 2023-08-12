@@ -22,6 +22,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"encoding/json"
+
 	v1beta1 "k8s.io/api/batch/v1beta1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	v1 "k8s.io/kubernetes/pkg/apis/core/v1"
@@ -94,6 +96,10 @@ func SetObjectDefaults_CronJob(in *v1beta1.CronJob) {
 				v1.SetDefaults_PersistentVolumeClaimSpec(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Limits)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests)
+				if a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode == nil {
+					ptrVar1 := PersistentVolumeMode(PersistentVolumeFilesystem)
+					a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode = &ptrVar1
+				}
 			}
 		}
 	}
@@ -300,6 +306,24 @@ func SetObjectDefaults_CronJob(in *v1beta1.CronJob) {
 				}
 			}
 		}
+	}
+	if in.Spec.JobTemplate.Spec.Template.Spec.RestartPolicy == "" {
+		in.Spec.JobTemplate.Spec.Template.Spec.RestartPolicy = RestartPolicy(RestartPolicyAlways)
+	}
+	if in.Spec.JobTemplate.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		ptrVar1 := int64(DefaultTerminationGracePeriodSeconds)
+		in.Spec.JobTemplate.Spec.Template.Spec.TerminationGracePeriodSeconds = &ptrVar1
+	}
+	if in.Spec.JobTemplate.Spec.Template.Spec.DNSPolicy == "" {
+		in.Spec.JobTemplate.Spec.Template.Spec.DNSPolicy = DNSPolicy(DNSClusterFirst)
+	}
+	if in.Spec.JobTemplate.Spec.Template.Spec.SecurityContext == nil {
+		if err := json.Unmarshal([]byte(`{}`), &in.Spec.JobTemplate.Spec.Template.Spec.SecurityContext); err != nil {
+			panic(err)
+		}
+	}
+	if in.Spec.JobTemplate.Spec.Template.Spec.SchedulerName == "" {
+		in.Spec.JobTemplate.Spec.Template.Spec.SchedulerName = DefaultSchedulerName
 	}
 	v1.SetDefaults_ResourceList(&in.Spec.JobTemplate.Spec.Template.Spec.Overhead)
 }

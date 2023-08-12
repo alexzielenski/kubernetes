@@ -59,6 +59,10 @@ func SetObjectDefaults_ValidatingAdmissionPolicy(in *v1alpha1.ValidatingAdmissio
 			v1.SetDefaults_Rule(&a.RuleWithOperations.Rule)
 		}
 	}
+	if in.Spec.FailurePolicy == nil {
+		ptrVar1 := v1alpha1.FailurePolicyType(Fail)
+		in.Spec.FailurePolicy = &ptrVar1
+	}
 }
 
 func SetObjectDefaults_ValidatingAdmissionPolicyBinding(in *v1alpha1.ValidatingAdmissionPolicyBinding) {

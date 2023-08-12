@@ -22,6 +22,8 @@ limitations under the License.
 package v1
 
 import (
+	"encoding/json"
+
 	v1 "k8s.io/api/networking/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -62,6 +64,11 @@ func SetObjectDefaults_NetworkPolicy(in *v1.NetworkPolicy) {
 		for j := range a.Ports {
 			b := &a.Ports[j]
 			SetDefaults_NetworkPolicyPort(b)
+		}
+	}
+	if in.Spec.PolicyTypes == nil {
+		if err := json.Unmarshal([]byte(`DefaultPolicyTypes()`), &in.Spec.PolicyTypes); err != nil {
+			panic(err)
 		}
 	}
 }

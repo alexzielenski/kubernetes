@@ -22,6 +22,8 @@ limitations under the License.
 package v1
 
 import (
+	"encoding/json"
+
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -39,7 +41,15 @@ func RegisterDefaults(scheme *runtime.Scheme) error {
 func SetObjectDefaults_CustomResourceDefinition(in *CustomResourceDefinition) {
 	SetDefaults_CustomResourceDefinition(in)
 	SetDefaults_CustomResourceDefinitionSpec(&in.Spec)
+	if in.Spec.Conversion == nil {
+		if err := json.Unmarshal([]byte(`{}`), &in.Spec.Conversion); err != nil {
+			panic(err)
+		}
+	}
 	if in.Spec.Conversion != nil {
+		if in.Spec.Conversion.Strategy == "" {
+			in.Spec.Conversion.Strategy = ConversionStrategyType(NoneConverter)
+		}
 		if in.Spec.Conversion.Webhook != nil {
 			if in.Spec.Conversion.Webhook.ClientConfig != nil {
 				if in.Spec.Conversion.Webhook.ClientConfig.Service != nil {

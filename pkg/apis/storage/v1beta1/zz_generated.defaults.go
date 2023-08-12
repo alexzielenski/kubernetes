@@ -80,6 +80,9 @@ func SetObjectDefaults_VolumeAttachment(in *v1beta1.VolumeAttachment) {
 		if in.Spec.Source.InlineVolumeSpec.PersistentVolumeSource.ScaleIO != nil {
 			v1.SetDefaults_ScaleIOPersistentVolumeSource(in.Spec.Source.InlineVolumeSpec.PersistentVolumeSource.ScaleIO)
 		}
+		if in.Spec.Source.InlineVolumeSpec.PersistentVolumeReclaimPolicy == "" {
+			in.Spec.Source.InlineVolumeSpec.PersistentVolumeReclaimPolicy = PersistentVolumeReclaimPolicy(PersistentVolumeReclaimRetain)
+		}
 	}
 }
 

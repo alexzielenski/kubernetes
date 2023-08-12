@@ -22,6 +22,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"encoding/json"
+
 	v1beta1 "k8s.io/api/extensions/v1beta1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	v1 "k8s.io/kubernetes/pkg/apis/core/v1"
@@ -102,6 +104,10 @@ func SetObjectDefaults_DaemonSet(in *v1beta1.DaemonSet) {
 				v1.SetDefaults_PersistentVolumeClaimSpec(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Limits)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests)
+				if a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode == nil {
+					ptrVar1 := PersistentVolumeMode(PersistentVolumeFilesystem)
+					a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode = &ptrVar1
+				}
 			}
 		}
 	}
@@ -308,6 +314,24 @@ func SetObjectDefaults_DaemonSet(in *v1beta1.DaemonSet) {
 				}
 			}
 		}
+	}
+	if in.Spec.Template.Spec.RestartPolicy == "" {
+		in.Spec.Template.Spec.RestartPolicy = RestartPolicy(RestartPolicyAlways)
+	}
+	if in.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		ptrVar1 := int64(DefaultTerminationGracePeriodSeconds)
+		in.Spec.Template.Spec.TerminationGracePeriodSeconds = &ptrVar1
+	}
+	if in.Spec.Template.Spec.DNSPolicy == "" {
+		in.Spec.Template.Spec.DNSPolicy = DNSPolicy(DNSClusterFirst)
+	}
+	if in.Spec.Template.Spec.SecurityContext == nil {
+		if err := json.Unmarshal([]byte(`{}`), &in.Spec.Template.Spec.SecurityContext); err != nil {
+			panic(err)
+		}
+	}
+	if in.Spec.Template.Spec.SchedulerName == "" {
+		in.Spec.Template.Spec.SchedulerName = DefaultSchedulerName
 	}
 	v1.SetDefaults_ResourceList(&in.Spec.Template.Spec.Overhead)
 }
@@ -377,6 +401,10 @@ func SetObjectDefaults_Deployment(in *v1beta1.Deployment) {
 				v1.SetDefaults_PersistentVolumeClaimSpec(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Limits)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests)
+				if a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode == nil {
+					ptrVar1 := PersistentVolumeMode(PersistentVolumeFilesystem)
+					a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode = &ptrVar1
+				}
 			}
 		}
 	}
@@ -583,6 +611,24 @@ func SetObjectDefaults_Deployment(in *v1beta1.Deployment) {
 				}
 			}
 		}
+	}
+	if in.Spec.Template.Spec.RestartPolicy == "" {
+		in.Spec.Template.Spec.RestartPolicy = RestartPolicy(RestartPolicyAlways)
+	}
+	if in.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		ptrVar1 := int64(DefaultTerminationGracePeriodSeconds)
+		in.Spec.Template.Spec.TerminationGracePeriodSeconds = &ptrVar1
+	}
+	if in.Spec.Template.Spec.DNSPolicy == "" {
+		in.Spec.Template.Spec.DNSPolicy = DNSPolicy(DNSClusterFirst)
+	}
+	if in.Spec.Template.Spec.SecurityContext == nil {
+		if err := json.Unmarshal([]byte(`{}`), &in.Spec.Template.Spec.SecurityContext); err != nil {
+			panic(err)
+		}
+	}
+	if in.Spec.Template.Spec.SchedulerName == "" {
+		in.Spec.Template.Spec.SchedulerName = DefaultSchedulerName
 	}
 	v1.SetDefaults_ResourceList(&in.Spec.Template.Spec.Overhead)
 }
@@ -682,6 +728,10 @@ func SetObjectDefaults_ReplicaSet(in *v1beta1.ReplicaSet) {
 				v1.SetDefaults_PersistentVolumeClaimSpec(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Limits)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests)
+				if a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode == nil {
+					ptrVar1 := PersistentVolumeMode(PersistentVolumeFilesystem)
+					a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode = &ptrVar1
+				}
 			}
 		}
 	}
@@ -888,6 +938,24 @@ func SetObjectDefaults_ReplicaSet(in *v1beta1.ReplicaSet) {
 				}
 			}
 		}
+	}
+	if in.Spec.Template.Spec.RestartPolicy == "" {
+		in.Spec.Template.Spec.RestartPolicy = RestartPolicy(RestartPolicyAlways)
+	}
+	if in.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		ptrVar1 := int64(DefaultTerminationGracePeriodSeconds)
+		in.Spec.Template.Spec.TerminationGracePeriodSeconds = &ptrVar1
+	}
+	if in.Spec.Template.Spec.DNSPolicy == "" {
+		in.Spec.Template.Spec.DNSPolicy = DNSPolicy(DNSClusterFirst)
+	}
+	if in.Spec.Template.Spec.SecurityContext == nil {
+		if err := json.Unmarshal([]byte(`{}`), &in.Spec.Template.Spec.SecurityContext); err != nil {
+			panic(err)
+		}
+	}
+	if in.Spec.Template.Spec.SchedulerName == "" {
+		in.Spec.Template.Spec.SchedulerName = DefaultSchedulerName
 	}
 	v1.SetDefaults_ResourceList(&in.Spec.Template.Spec.Overhead)
 }

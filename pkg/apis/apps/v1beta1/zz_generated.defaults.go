@@ -22,6 +22,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"encoding/json"
+
 	v1beta1 "k8s.io/api/apps/v1beta1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	v1 "k8s.io/kubernetes/pkg/apis/core/v1"
@@ -96,6 +98,10 @@ func SetObjectDefaults_Deployment(in *v1beta1.Deployment) {
 				v1.SetDefaults_PersistentVolumeClaimSpec(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Limits)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests)
+				if a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode == nil {
+					ptrVar1 := PersistentVolumeMode(PersistentVolumeFilesystem)
+					a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode = &ptrVar1
+				}
 			}
 		}
 	}
@@ -302,6 +308,24 @@ func SetObjectDefaults_Deployment(in *v1beta1.Deployment) {
 				}
 			}
 		}
+	}
+	if in.Spec.Template.Spec.RestartPolicy == "" {
+		in.Spec.Template.Spec.RestartPolicy = RestartPolicy(RestartPolicyAlways)
+	}
+	if in.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		ptrVar1 := int64(DefaultTerminationGracePeriodSeconds)
+		in.Spec.Template.Spec.TerminationGracePeriodSeconds = &ptrVar1
+	}
+	if in.Spec.Template.Spec.DNSPolicy == "" {
+		in.Spec.Template.Spec.DNSPolicy = DNSPolicy(DNSClusterFirst)
+	}
+	if in.Spec.Template.Spec.SecurityContext == nil {
+		if err := json.Unmarshal([]byte(`{}`), &in.Spec.Template.Spec.SecurityContext); err != nil {
+			panic(err)
+		}
+	}
+	if in.Spec.Template.Spec.SchedulerName == "" {
+		in.Spec.Template.Spec.SchedulerName = DefaultSchedulerName
 	}
 	v1.SetDefaults_ResourceList(&in.Spec.Template.Spec.Overhead)
 }
@@ -371,6 +395,10 @@ func SetObjectDefaults_StatefulSet(in *v1beta1.StatefulSet) {
 				v1.SetDefaults_PersistentVolumeClaimSpec(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Limits)
 				v1.SetDefaults_ResourceList(&a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests)
+				if a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode == nil {
+					ptrVar1 := PersistentVolumeMode(PersistentVolumeFilesystem)
+					a.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.VolumeMode = &ptrVar1
+				}
 			}
 		}
 	}
@@ -578,6 +606,24 @@ func SetObjectDefaults_StatefulSet(in *v1beta1.StatefulSet) {
 			}
 		}
 	}
+	if in.Spec.Template.Spec.RestartPolicy == "" {
+		in.Spec.Template.Spec.RestartPolicy = RestartPolicy(RestartPolicyAlways)
+	}
+	if in.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		ptrVar1 := int64(DefaultTerminationGracePeriodSeconds)
+		in.Spec.Template.Spec.TerminationGracePeriodSeconds = &ptrVar1
+	}
+	if in.Spec.Template.Spec.DNSPolicy == "" {
+		in.Spec.Template.Spec.DNSPolicy = DNSPolicy(DNSClusterFirst)
+	}
+	if in.Spec.Template.Spec.SecurityContext == nil {
+		if err := json.Unmarshal([]byte(`{}`), &in.Spec.Template.Spec.SecurityContext); err != nil {
+			panic(err)
+		}
+	}
+	if in.Spec.Template.Spec.SchedulerName == "" {
+		in.Spec.Template.Spec.SchedulerName = DefaultSchedulerName
+	}
 	v1.SetDefaults_ResourceList(&in.Spec.Template.Spec.Overhead)
 	for i := range in.Spec.VolumeClaimTemplates {
 		a := &in.Spec.VolumeClaimTemplates[i]
@@ -585,6 +631,13 @@ func SetObjectDefaults_StatefulSet(in *v1beta1.StatefulSet) {
 		v1.SetDefaults_PersistentVolumeClaimSpec(&a.Spec)
 		v1.SetDefaults_ResourceList(&a.Spec.Resources.Limits)
 		v1.SetDefaults_ResourceList(&a.Spec.Resources.Requests)
+		if a.Spec.VolumeMode == nil {
+			ptrVar1 := PersistentVolumeMode(PersistentVolumeFilesystem)
+			a.Spec.VolumeMode = &ptrVar1
+		}
+		if a.Status.Phase == "" {
+			a.Status.Phase = PersistentVolumeClaimPhase(ClaimPending)
+		}
 		v1.SetDefaults_ResourceList(&a.Status.Capacity)
 		v1.SetDefaults_ResourceList(&a.Status.AllocatedResources)
 	}
