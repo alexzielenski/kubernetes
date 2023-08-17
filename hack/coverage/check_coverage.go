@@ -345,16 +345,19 @@ func populateNextLevelWithEmpty(path *field.Path, obj interface{}, blacklist map
 
 			switch fldType.Type.Kind() {
 			case reflect.Struct:
-				fld.Set(reflect.New(fld.Type()).Elem())
+				// fld.Addr().Set(reflect.New(fld.Type()))
 			case reflect.Pointer:
-				fld.Set(reflect.New(fld.Type().Elem()))
+				// i := reflect.New(fld.Type().Elem()).Interface()
+				// addri := &i
+				// fld.Set(reflect.ValueOf(addri).Elem().Convert(fldType.Type.Elem()).Addr())
 				didAThing = true
 			case reflect.Slice:
-				fld.Set(reflect.MakeSlice(fldType.Type, 1, 1))
+				// fld.Set(reflect.MakeSlice(fldType.Type, 1, 1))
 				didAThing = true
 			case reflect.Map:
 				newMap := reflect.MakeMap(fldType.Type)
-				newMap.SetMapIndex(reflect.ValueOf(""), reflect.New(fldType.Type.Elem()))
+				newMap.SetMapIndex(reflect.Zero(fldType.Type.Key()), reflect.New(fldType.Type.Elem()).Elem())
+				// fld.Set(newMap)
 				didAThing = true
 			default:
 				// Anything else we dont care to expand
