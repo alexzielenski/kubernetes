@@ -47122,6 +47122,13 @@ func schema_pkg_apis_apiextensions_v1_ValidationRule(ref common.ReferenceCallbac
 							Format:      "",
 						},
 					},
+					"optionalOldSelf": {
+						SchemaProps: spec.SchemaProps{
+							Description: "optionalOldSelf is used to indicate a transition rule is always evaluated. If enabled: - During a create, `oldSelf` evaluates to `null` - During an update, `oldSelf` evaluates to `null` when the old object is\n\t missing the field or if the field is uncorrelatable.\nIf `oldSelf` is not used in `rule`, this field is ignored.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"rule"},
 			},
@@ -48527,6 +48534,13 @@ func schema_pkg_apis_apiextensions_v1beta1_ValidationRule(ref common.ReferenceCa
 						SchemaProps: spec.SchemaProps{
 							Description: "fieldPath represents the field path returned when the validation fails. It must be a relative JSON path (i.e. with array notation) scoped to the location of this x-kubernetes-validations extension in the schema and refer to an existing field. e.g. when validation checks if a specific attribute `foo` under a map `testMap`, the fieldPath could be set to `.testMap.foo` If the validation checks two lists must have unique attributes, the fieldPath could be set to either of the list: e.g. `.testList` It does not support list numeric index. It supports child operation to refer to an existing field currently. Refer to [JSONPath support in Kubernetes](https://kubernetes.io/docs/reference/kubectl/jsonpath/) for more info. Numeric index of array is not supported. For field name which contains special characters, use `['specialName']` to refer the field name. e.g. for attribute `foo.34$` appears in a list `testList`, the fieldPath could be set to `.testList['foo.34$']`",
 							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"optionalOldSelf": {
+						SchemaProps: spec.SchemaProps{
+							Description: "optionalOldSelf is used to indicate a transition rule is always evaluated. If enabled: - During a create, `oldSelf` evaluates to `null` - During an update, `oldSelf` evaluates to `null` when the old object is\n\t missing the field or if the field is uncorrelatable.\nIf `oldSelf` is not used in `rule`, this field is ignored.",
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
