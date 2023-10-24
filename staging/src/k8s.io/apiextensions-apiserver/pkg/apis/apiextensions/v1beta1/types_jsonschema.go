@@ -285,6 +285,16 @@ type ValidationRule struct {
 	// e.g. for attribute `foo.34$` appears in a list `testList`, the fieldPath could be set to `.testList['foo.34$']`
 	// +optional
 	FieldPath string `json:"fieldPath,omitempty" protobuf:"bytes,5,opt,name=fieldPath"`
+
+	// optionalOldSelf is used to indicate a transition rule is always evaluated.
+	// If enabled:
+	// - During a create, `oldSelf` evaluates to `null`
+	// - During an update, `oldSelf` evaluates to `null` when the old object is
+	//	 missing the field or if the field is uncorrelatable.
+	// If `oldSelf` is not used in `rule`, this field is ignored.
+	// +featureGate=CRDValidationRatcheting
+	// +optional
+	OptionalOldSelf *bool `json:"optionalOldSelf,omitempty" protobuf:"bytes,6,opt,name=optionalOldSelf"`
 }
 
 // JSON represents any valid JSON value.
