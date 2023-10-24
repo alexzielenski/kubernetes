@@ -36,11 +36,14 @@ import (
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel/model"
+	apiextensionsfeatures "k8s.io/apiextensions-apiserver/pkg/features"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
 	"k8s.io/apiserver/pkg/cel/common"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/apiserver/pkg/warning"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
 // TestValidationExpressions tests CEL integration with custom resource values and OpenAPIv3.
@@ -3614,6 +3617,148 @@ func TestRatcheting(t *testing.T) {
 				assert.True(t, found, "expected warning %q not found", expectedWarning)
 			}
 
+		})
+	}
+}
+
+// Runs transition rule cases with OptionalOldSelf set to true on the schema
+func TestOptionalOldSelf(t *testing.T) {
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CRDValidationRatcheting, true)()
+
+	tests := []struct {
+		name   string
+		schema *schema.Structural
+		obj    interface{}
+		oldObj interface{}
+		errors []string // strings that error message must contain
+	}{
+		{
+			name: "allow new value if old value is null",
+			obj: map[string]interface{}{
+				"foo": "bar",
+			},
+			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
+				"foo": stringType,
+			}), "self.foo == 'not bar' || oldSelf == null"),
+		},
+		{
+			name: "block new value if old value is not null",
+			obj: map[string]interface{}{
+				"foo": "invalid",
+			},
+			oldObj: map[string]interface{}{
+				"foo": "bar",
+			},
+			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
+				"foo": stringType,
+			}), "self.foo == 'valid' || oldSelf == null"),
+			errors: []string{"failed rule"},
+		},
+		{
+			name: "allow invalid new value if old value is also invalid",
+			obj: map[string]interface{}{
+				"foo": "invalid again",
+			},
+			oldObj: map[string]interface{}{
+				"foo": "invalid",
+			},
+			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
+				"foo": stringType,
+			}), "self.foo == 'valid' || (oldSelf != null && oldSelf.foo != 'valid')"),
+		},
+		{
+			name: "block invalid new value if old value is valid",
+			obj: map[string]interface{}{
+				"foo": "invalid",
+			},
+			oldObj: map[string]interface{}{
+				"foo": "valid",
+			},
+			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
+				"foo": stringType,
+			}), "self.foo == 'valid' || (oldSelf != null && oldSelf.foo != 'valid')"),
+			errors: []string{"failed rule"},
+		},
+		{
+			name:   "create: new min or allow higher than oldValue",
+			obj:    10,
+			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+		},
+		{
+			name: "block create: new min or allow higher than oldValue",
+			obj:  9,
+			// Can't use != null because type is integer and no overload
+			// workaround by comparing type, but kinda hacky
+			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			errors: []string{"failed rule"},
+		},
+		{
+			name:   "update: new min or allow higher than oldValue",
+			obj:    10,
+			oldObj: 5,
+			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+		},
+		{
+			name:   "ratchet update: new min or allow higher than oldValue",
+			obj:    9,
+			oldObj: 5,
+			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+		},
+		{
+			name:   "ratchet noop update: new min or allow higher than oldValue",
+			obj:    5,
+			oldObj: 5,
+			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+		},
+		{
+			name:   "block update: new min or allow higher than oldValue",
+			obj:    4,
+			oldObj: 5,
+			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			errors: []string{"failed rule"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		tp := true
+		for i := range tt.schema.XValidations {
+			tt.schema.XValidations[i].OptionalOldSelf = &tp
+		}
+
+		t.Run(tt.name, func(t *testing.T) {
+			// t.Parallel()
+
+			ctx := context.TODO()
+			celValidator := validator(tt.schema, true, model.SchemaDeclType(tt.schema, true), celconfig.PerCallLimit)
+			if celValidator == nil {
+				t.Fatal("expected non nil validator")
+			}
+			errs, _ := celValidator.Validate(ctx, field.NewPath("root"), tt.schema, tt.obj, tt.oldObj, math.MaxInt)
+			unmatched := map[string]struct{}{}
+			for _, e := range tt.errors {
+				unmatched[e] = struct{}{}
+			}
+			for _, err := range errs {
+				if err.Type != field.ErrorTypeInvalid {
+					t.Errorf("expected only ErrorTypeInvalid errors, but got: %v", err)
+					continue
+				}
+				matched := false
+				for expected := range unmatched {
+					if strings.Contains(err.Error(), expected) {
+						delete(unmatched, expected)
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					t.Errorf("expected error to contain one of %v, but got: %v", unmatched, err)
+				}
+			}
+			if len(unmatched) > 0 {
+				t.Errorf("expected errors %v", unmatched)
+			}
 		})
 	}
 }

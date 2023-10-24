@@ -1340,6 +1340,105 @@ func TestRatchetingFunctionality(t *testing.T) {
 						}}},
 			},
 		},
+		{
+			Name: "CEL Optional OldSelf",
+			Operations: []ratchetingTestOperation{
+				updateMyCRDV1Beta1Schema{&apiextensionsv1.JSONSchemaProps{
+					Type: "object",
+					Properties: map[string]apiextensionsv1.JSONSchemaProps{
+						"field": {
+							Type: "string",
+							XValidations: []apiextensionsv1.ValidationRule{
+								{
+									Rule:            "type(oldSelf) == null_type",
+									Message:         "oldSelf must be null",
+									OptionalOldSelf: ptr(true),
+								},
+							},
+						},
+					},
+				}},
+
+				applyPatchOperation{
+					"create instance passes since oldself is null",
+					myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
+						"field": "value",
+					}},
+
+				expectError{
+					applyPatchOperation{
+						"update field fails, since oldself is not null",
+						myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
+							"field": "value2",
+						},
+					},
+				},
+
+				expectError{
+					applyPatchOperation{
+						"noop update field fails, since oldself is not null and transition rules are not ratcheted",
+						myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
+							"field": "value",
+						},
+					},
+				},
+			},
+		},
+		{
+			// Should evaluate with oldSelf == null unconditionally for
+			// both creates and updates
+			Name: "CEL Optional OldSelf In Uncorrelatable Portion of Schema",
+			Operations: []ratchetingTestOperation{
+				updateMyCRDV1Beta1Schema{&apiextensionsv1.JSONSchemaProps{
+					Type: "object",
+					Properties: map[string]apiextensionsv1.JSONSchemaProps{
+						"things": {
+							Type: "array",
+							// atomic lists are not correlatable by index
+							XListType: ptr("atomic"),
+							MaxItems:  ptr[int64](10),
+							Items: &apiextensionsv1.JSONSchemaPropsOrArray{
+								Schema: &apiextensionsv1.JSONSchemaProps{
+									Type: "object",
+									Properties: map[string]apiextensionsv1.JSONSchemaProps{
+										"field": {
+											Type: "string",
+											XValidations: []apiextensionsv1.ValidationRule{
+												{
+													Rule:            "type(oldSelf) == null_type",
+													Message:         "oldSelf must be null",
+													OptionalOldSelf: ptr(true),
+												},
+											},
+										}},
+								},
+							},
+						},
+					},
+				}},
+				applyPatchOperation{
+					"create instance passes since oldself is null",
+					myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
+						"things": []interface{}{
+							map[string]interface{}{
+								"field": "value",
+							},
+						},
+					},
+				},
+
+				applyPatchOperation{
+					"update field passes, since oldself is null in uncoprelatable portion of schema",
+					myCRDV1Beta1, myCRDInstanceName, map[string]interface{}{
+						"things": []interface{}{
+							map[string]interface{}{
+								"field": "value2",
+							},
+						},
+					},
+				},
+			},
+		},
 		// Features that should not ratchet
 		{
 			Name: "AllOf_should_not_ratchet",

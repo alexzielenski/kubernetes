@@ -36,11 +36,13 @@ import (
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel/model"
+	"k8s.io/apiextensions-apiserver/pkg/features"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/cel"
 	"k8s.io/apiserver/pkg/cel/common"
 	"k8s.io/apiserver/pkg/cel/environment"
 	"k8s.io/apiserver/pkg/cel/metrics"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/apiserver/pkg/warning"
 
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
@@ -300,7 +302,11 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 			// rule is empty
 			continue
 		}
-		if compiled.UsesOldSelf && oldObj == nil {
+
+		// If ratcheting is enabled, allow rule with oldSelf to evaluate
+		// when `optionalOldSelf` is set to true
+		allowsNilOldSelf := utilfeature.DefaultFeatureGate.Enabled(features.CRDValidationRatcheting) && rule.OptionalOldSelf != nil && *rule.OptionalOldSelf
+		if compiled.UsesOldSelf && oldObj == nil && !allowsNilOldSelf {
 			// transition rules are evaluated only if there is a comparable existing value
 			continue
 		}
@@ -624,11 +630,11 @@ type validationActivation struct {
 
 func validationActivationWithOldSelf(sts *schema.Structural, obj, oldObj interface{}) interpreter.Activation {
 	va := &validationActivation{
-		self: UnstructuredToVal(obj, sts),
+		self:       UnstructuredToVal(obj, sts),
+		hasOldSelf: true,
 	}
 	if oldObj != nil {
 		va.oldSelf = UnstructuredToVal(oldObj, sts) // +k8s:verify-mutation:reason=clone
-		va.hasOldSelf = true                        // +k8s:verify-mutation:reason=clone
 	}
 	return va
 }
