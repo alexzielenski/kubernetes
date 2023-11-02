@@ -30,6 +30,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func strPtr(in string) *string {
@@ -196,9 +197,6 @@ func TestValidateAPIApproval(t *testing.T) {
 
 // TestDropDisabledFields tests if the drop functionality is working fine or not with feature gate switch
 func TestDropDisabledFields(t *testing.T) {
-	tru := true
-	fals := false
-
 	testCases := []struct {
 		name             string
 		enableRatcheting bool
@@ -226,21 +224,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
-										},
-									},
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -250,7 +234,7 @@ func TestDropDisabledFields(t *testing.T) {
 										{
 											Rule:            "isTest == true",
 											Message:         "isTest should be true.",
-											OptionalOldSelf: &tru,
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -275,19 +259,6 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:    "size(self) > 0",
 									Message: "openAPIV3Schema should contain more than 0 element.",
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:    "size(self) > 0",
-												Message: "size of scoped field should be greater than 0.",
-											},
-										},
-									},
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -324,21 +295,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
-										},
-									},
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -348,7 +305,7 @@ func TestDropDisabledFields(t *testing.T) {
 										{
 											Rule:            "isTest == true",
 											Message:         "isTest should be true.",
-											OptionalOldSelf: &tru,
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -373,21 +330,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
-										},
-									},
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -397,7 +340,7 @@ func TestDropDisabledFields(t *testing.T) {
 										{
 											Rule:            "isTest == true",
 											Message:         "isTest should be true.",
-											OptionalOldSelf: &tru,
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -425,21 +368,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
-										},
-									},
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -449,7 +378,7 @@ func TestDropDisabledFields(t *testing.T) {
 										{
 											Rule:            "isTest == true",
 											Message:         "isTest should be true.",
-											OptionalOldSelf: &tru,
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -469,16 +398,14 @@ func TestDropDisabledFields(t *testing.T) {
 					Validation: &apiextensions.CustomResourceValidation{
 						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 							Type: "object",
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
+							Properties: map[string]apiextensions.JSONSchemaProps{
+								"otherRule": {
+									Type: "object",
+									XValidations: apiextensions.ValidationRules{
+										{
+											Rule:            "self.isTest == true",
+											Message:         "isTest should be true.",
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 								},
@@ -497,21 +424,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
-										},
-									},
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -521,7 +434,7 @@ func TestDropDisabledFields(t *testing.T) {
 										{
 											Rule:            "isTest == true",
 											Message:         "isTest should be true.",
-											OptionalOldSelf: &tru,
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -549,21 +462,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
-										},
-									},
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -573,7 +472,7 @@ func TestDropDisabledFields(t *testing.T) {
 										{
 											Rule:            "isTest == true",
 											Message:         "isTest should be true.",
-											OptionalOldSelf: &tru,
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -593,16 +492,14 @@ func TestDropDisabledFields(t *testing.T) {
 					Validation: &apiextensions.CustomResourceValidation{
 						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
 							Type: "object",
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &fals,
-											},
+							Properties: map[string]apiextensions.JSONSchemaProps{
+								"subRule": {
+									Type: "object",
+									XValidations: apiextensions.ValidationRules{
+										{
+											Rule:            "isTest == true",
+											Message:         "isTest should be true.",
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 								},
@@ -621,21 +518,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
-								},
-							},
-							Dependencies: apiextensions.JSONSchemaDependencies{
-								"test": apiextensions.JSONSchemaPropsOrStringArray{
-									Schema: &apiextensions.JSONSchemaProps{
-										Type: "object",
-										XValidations: apiextensions.ValidationRules{
-											{
-												Rule:            "size(self) > 0",
-												Message:         "size of scoped field should be greater than 0.",
-												OptionalOldSelf: &tru,
-											},
-										},
-									},
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 							Properties: map[string]apiextensions.JSONSchemaProps{
@@ -645,7 +528,7 @@ func TestDropDisabledFields(t *testing.T) {
 										{
 											Rule:            "isTest == true",
 											Message:         "isTest should be true.",
-											OptionalOldSelf: &tru,
+											OptionalOldSelf: ptr.To(true),
 										},
 									},
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -673,7 +556,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 						},
@@ -720,7 +603,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 						},
@@ -737,7 +620,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "old data",
 									Message:         "old data",
-									OptionalOldSelf: &tru,
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 						},
@@ -754,7 +637,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 						},
@@ -775,7 +658,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 						},
@@ -802,7 +685,7 @@ func TestDropDisabledFields(t *testing.T) {
 								{
 									Rule:            "size(self) > 0",
 									Message:         "openAPIV3Schema should contain more than 0 element.",
-									OptionalOldSelf: &tru,
+									OptionalOldSelf: ptr.To(true),
 								},
 							},
 						},
