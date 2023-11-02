@@ -3730,7 +3730,7 @@ func TestOptionalOldSelf(t *testing.T) {
 			// t.Parallel()
 
 			ctx := context.TODO()
-			celValidator := validator(tt.schema, true, model.SchemaDeclType(tt.schema, true), celconfig.PerCallLimit)
+			celValidator := validator(tt.schema, true, model.SchemaDeclType(tt.schema, false), celconfig.PerCallLimit)
 			if celValidator == nil {
 				t.Fatal("expected non nil validator")
 			}
@@ -3761,6 +3761,128 @@ func TestOptionalOldSelf(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Shows that type(oldSelf) == null_type works for all supported OpenAPI types
+// both when oldSelf is null and when it is not null
+func TestOptionalOldSelfCheckForNull(t *testing.T) {
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, apiextensionsfeatures.CRDValidationRatcheting, true)()
+
+	tests := []struct {
+		name   string
+		schema schema.Structural
+		obj    interface{}
+		oldObj interface{}
+	}{
+		{
+			name: "object",
+			obj: map[string]interface{}{
+				"foo": "bar",
+			},
+			oldObj: map[string]interface{}{
+				"foo": "baz",
+			},
+			schema: withRule(objectType(map[string]schema.Structural{
+				"foo": stringType,
+			}), `type(oldSelf) == null_type || self.foo == "bar"`),
+		},
+		{
+			name:   "string",
+			obj:    "bar",
+			oldObj: "baz",
+			schema: withRule(stringType, `
+				type(oldSelf) == null_type || self == "bar"
+			`),
+		},
+		{
+			name:   "integer",
+			obj:    1,
+			oldObj: 2,
+			schema: withRule(integerType, `
+				type(oldSelf) == null_type || self == 1
+			`),
+		},
+		{
+			name:   "number",
+			obj:    1.1,
+			oldObj: 2.2,
+			schema: withRule(numberType, `
+				type(oldSelf) == null_type || self == 1.1
+			`),
+		},
+		{
+			name:   "boolean",
+			obj:    true,
+			oldObj: false,
+			schema: withRule(booleanType, `
+				type(oldSelf) == null_type || self == true
+			`),
+		},
+		{
+			name:   "array",
+			obj:    []interface{}{"bar"},
+			oldObj: []interface{}{"baz"},
+			schema: withRule(arrayType("", nil, &stringSchema), `
+				type(oldSelf) == null_type || self[0] == "bar"
+			`),
+		},
+		{
+			name:   "set-array",
+			obj:    []interface{}{"bar"},
+			oldObj: []interface{}{"baz"},
+			schema: withRule(arrayType("set", nil, &stringSchema), `
+				type(oldSelf) == null_type || self[0] == "bar"
+			`),
+		},
+		{
+			name: "map-array",
+			obj: []interface{}{map[string]interface{}{
+				"key":   "foo",
+				"value": "bar",
+			}},
+			oldObj: []interface{}{map[string]interface{}{
+				"key":   "foo",
+				"value": "baz",
+			}},
+			schema: withRule(arrayType("map", []string{"key"}, objectTypePtr(map[string]schema.Structural{
+				"key":   stringType,
+				"value": stringType,
+			})), `
+				type(oldSelf) == null_type || self[0].value == "bar"
+			`),
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		tp := true
+		for i := range tt.schema.XValidations {
+			tt.schema.XValidations[i].OptionalOldSelf = &tp
+		}
+
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.TODO()
+			celValidator := validator(&tt.schema, false, model.SchemaDeclType(&tt.schema, false), celconfig.PerCallLimit)
+			if celValidator == nil {
+				t.Fatal("expected non nil validator")
+			}
+
+			t.Run("null old", func(t *testing.T) {
+				errs, _ := celValidator.Validate(ctx, field.NewPath("root"), &tt.schema, tt.obj, nil, math.MaxInt)
+				if len(errs) != 0 {
+					t.Errorf("expected no errors, but got: %v", errs)
+				}
+			})
+
+			t.Run("non-null old", func(t *testing.T) {
+				errs, _ := celValidator.Validate(ctx, field.NewPath("root"), &tt.schema, tt.obj, tt.oldObj, math.MaxInt)
+				if len(errs) != 0 {
+					t.Errorf("expected no errors, but got: %v", errs)
+				}
+			})
+		})
+	}
+
 }
 
 func genString(n int, c rune) string {
