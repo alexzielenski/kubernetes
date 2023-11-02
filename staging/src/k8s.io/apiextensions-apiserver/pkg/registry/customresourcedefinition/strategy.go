@@ -265,10 +265,6 @@ func dropOptionalOldSelfField(schema *apiextensions.JSONSchemaProps) {
 			schema.Items.JSONSchemas[i] = jsonSchema
 		}
 	}
-	for def, jsonSchemaPropsOrStringArray := range schema.Dependencies {
-		dropOptionalOldSelfField(jsonSchemaPropsOrStringArray.Schema)
-		schema.Dependencies[def] = jsonSchemaPropsOrStringArray
-	}
 }
 
 func specHasOptionalOldSelf(spec *apiextensions.CustomResourceDefinitionSpec) bool {
