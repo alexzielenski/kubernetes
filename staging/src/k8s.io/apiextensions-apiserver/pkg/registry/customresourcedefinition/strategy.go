@@ -242,7 +242,7 @@ func dropDisabledFields(newCRD *apiextensions.CustomResourceDefinition, oldCRD *
 	}
 }
 
-// dropXValidationsField drops field XValidations from CRD schema
+// dropOptionalOldSelfField drops field optionalOldSelf from CRD schema
 func dropOptionalOldSelfField(schema *apiextensions.JSONSchemaProps) {
 	if schema == nil {
 		return
