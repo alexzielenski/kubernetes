@@ -47124,7 +47124,7 @@ func schema_pkg_apis_apiextensions_v1_ValidationRule(ref common.ReferenceCallbac
 					},
 					"optionalOldSelf": {
 						SchemaProps: spec.SchemaProps{
-							Description: "optionalOldSelf is used to indicate a transition rule is always evaluated. If enabled: - During a create, `oldSelf` evaluates to `null` - During an update, `oldSelf` evaluates to `null` when the old object is\n\t missing the field or if the field is uncorrelatable.\nIf `oldSelf` is not used in `rule`, this field is ignored.",
+							Description: "optionalOldSelf is used to opt a transition rule into evaluation even when the object is first created, or if the old object is missing the value.\n\nIf enabled: - During a create, `type(oldSelf)` evaluates to `null_type` in CEL - During an update, `type(oldSelf)` evaluates to `null_type` when the old object is\n\t missing the value.\n\nMay not be set unless `oldSelf` is used in `rule`.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -48539,7 +48539,7 @@ func schema_pkg_apis_apiextensions_v1beta1_ValidationRule(ref common.ReferenceCa
 					},
 					"optionalOldSelf": {
 						SchemaProps: spec.SchemaProps{
-							Description: "optionalOldSelf is used to indicate a transition rule is always evaluated. If enabled: - During a create, `oldSelf` evaluates to `null` - During an update, `oldSelf` evaluates to `null` when the old object is\n\t missing the field or if the field is uncorrelatable.\nIf `oldSelf` is not used in `rule`, this field is ignored.",
+							Description: "optionalOldSelf is used to opt a transition rule into evaluation even when the object is first created, or if the old object is missing the value.\n\nIf enabled: - During a create, `type(oldSelf)` evaluates to `null_type` in CEL - During an update, `type(oldSelf)` evaluates to `null_type` when the old object is\n\t missing the value.\n\nMay not be set unless `oldSelf` is used in `rule`.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},

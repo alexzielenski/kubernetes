@@ -699,12 +699,17 @@ message ValidationRule {
   // +optional
   optional string fieldPath = 5;
 
-  // optionalOldSelf is used to indicate a transition rule is always evaluated.
+  // optionalOldSelf is used to opt a transition rule into evaluation
+  // even when the object is first created, or if the old object is
+  // missing the value.
+  //
   // If enabled:
-  // - During a create, `oldSelf` evaluates to `null`
-  // - During an update, `oldSelf` evaluates to `null` when the old object is
-  // 	 missing the field or if the field is uncorrelatable.
-  // If `oldSelf` is not used in `rule`, this field is ignored.
+  // - During a create, `type(oldSelf)` evaluates to `null_type` in CEL
+  // - During an update, `type(oldSelf)` evaluates to `null_type` when the old object is
+  // 	 missing the value.
+  //
+  // May not be set unless `oldSelf` is used in `rule`.
+  //
   // +featureGate=CRDValidationRatcheting
   // +optional
   optional bool optionalOldSelf = 6;
