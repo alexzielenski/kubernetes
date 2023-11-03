@@ -305,14 +305,15 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 
 		// If ratcheting is enabled, allow rule with oldSelf to evaluate
 		// when `optionalOldSelf` is set to true
+		acti := activation
 		allowsNilOldSelf := utilfeature.DefaultFeatureGate.Enabled(features.CRDValidationRatcheting) && rule.OptionalOldSelf != nil && *rule.OptionalOldSelf
 		if compiled.UsesOldSelf && oldObj == nil && !allowsNilOldSelf {
 			// transition rules are evaluated only if there is a comparable existing value
 			continue
 		} else if compiled.UsesOldSelf && allowsNilOldSelf {
-			activation = validationActivationWithOptionalOldSelf(sts, obj, oldObj)
+			acti = validationActivationWithOptionalOldSelf(sts, obj, oldObj)
 		}
-		evalResult, evalDetails, err := compiled.Program.ContextEval(ctx, activation)
+		evalResult, evalDetails, err := compiled.Program.ContextEval(ctx, acti)
 		if evalDetails == nil {
 			errs = append(errs, field.InternalError(fldPath, fmt.Errorf("runtime cost could not be calculated for validation rule: %v, no further validation rules will be run", ruleErrorString(rule))))
 			return errs, -1

@@ -173,6 +173,9 @@ func prepareEnvSetForRule(baseEnvSet *environment.EnvSet, scopedType *apiserverc
 				EnvOptions: []cel.EnvOption{
 					cel.Variable(OldScopedVarName, scopedType.CelType()),
 				},
+				DeclTypes: []*apiservercel.DeclType{
+					scopedType,
+				},
 			},
 		)
 	}
@@ -183,6 +186,9 @@ func prepareEnvSetForRule(baseEnvSet *environment.EnvSet, scopedType *apiserverc
 			IntroducedVersion: version.MajorMinor(1, 24),
 			EnvOptions: []cel.EnvOption{
 				cel.Variable(OldScopedVarName, types.NewOptionalType(scopedType.CelType())),
+			},
+			DeclTypes: []*apiservercel.DeclType{
+				scopedType,
 			},
 		},
 	)
