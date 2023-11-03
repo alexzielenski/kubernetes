@@ -3639,7 +3639,7 @@ func TestOptionalOldSelf(t *testing.T) {
 			},
 			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
 				"foo": stringType,
-			}), "self.foo == 'not bar' || oldSelf == null"),
+			}), "self.foo == 'not bar' || !oldSelf.hasValue()"),
 		},
 		{
 			name: "block new value if old value is not null",
@@ -3651,7 +3651,7 @@ func TestOptionalOldSelf(t *testing.T) {
 			},
 			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
 				"foo": stringType,
-			}), "self.foo == 'valid' || oldSelf == null"),
+			}), "self.foo == 'valid' || !oldSelf.hasValue()"),
 			errors: []string{"failed rule"},
 		},
 		{
@@ -3664,7 +3664,7 @@ func TestOptionalOldSelf(t *testing.T) {
 			},
 			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
 				"foo": stringType,
-			}), "self.foo == 'valid' || (oldSelf != null && oldSelf.foo != 'valid')"),
+			}), "self.foo == 'valid' || (oldSelf.hasValue() && oldSelf.value().foo != 'valid')"),
 		},
 		{
 			name: "block invalid new value if old value is valid",
@@ -3676,45 +3676,45 @@ func TestOptionalOldSelf(t *testing.T) {
 			},
 			schema: withRulePtr(objectTypePtr(map[string]schema.Structural{
 				"foo": stringType,
-			}), "self.foo == 'valid' || (oldSelf != null && oldSelf.foo != 'valid')"),
+			}), "self.foo == 'valid' || (oldSelf.hasValue() && oldSelf.value().foo != 'valid')"),
 			errors: []string{"failed rule"},
 		},
 		{
 			name:   "create: new min or allow higher than oldValue",
 			obj:    10,
-			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			schema: cloneWithRule(&integerType, "self >= 10 || (oldSelf.hasValue() && oldSelf.value() <= self)"),
 		},
 		{
 			name: "block create: new min or allow higher than oldValue",
 			obj:  9,
 			// Can't use != null because type is integer and no overload
 			// workaround by comparing type, but kinda hacky
-			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			schema: cloneWithRule(&integerType, "self >= 10 || (oldSelf.hasValue() && oldSelf.value() <= self)"),
 			errors: []string{"failed rule"},
 		},
 		{
 			name:   "update: new min or allow higher than oldValue",
 			obj:    10,
 			oldObj: 5,
-			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			schema: cloneWithRule(&integerType, "self >= 10 || (oldSelf.hasValue() && oldSelf.value() <= self)"),
 		},
 		{
 			name:   "ratchet update: new min or allow higher than oldValue",
 			obj:    9,
 			oldObj: 5,
-			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			schema: cloneWithRule(&integerType, "self >= 10 || (oldSelf.hasValue() && oldSelf.value() <= self)"),
 		},
 		{
 			name:   "ratchet noop update: new min or allow higher than oldValue",
 			obj:    5,
 			oldObj: 5,
-			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			schema: cloneWithRule(&integerType, "self >= 10 || (oldSelf.hasValue() && oldSelf.value() <= self)"),
 		},
 		{
 			name:   "block update: new min or allow higher than oldValue",
 			obj:    4,
 			oldObj: 5,
-			schema: cloneWithRule(&integerType, "self >= 10 || (type(oldSelf) != null_type && oldSelf <= self)"),
+			schema: cloneWithRule(&integerType, "self >= 10 || (oldSelf.hasValue() && oldSelf.value() <= self)"),
 			errors: []string{"failed rule"},
 		},
 	}

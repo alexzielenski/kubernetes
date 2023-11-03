@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker"
+	"github.com/google/cel-go/common/types"
 
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
@@ -135,7 +136,12 @@ func Compile(s *schema.Structural, declType *apiservercel.DeclType, perCallLimit
 	compResults := make([]CompilationResult, len(celRules))
 	maxCardinality := maxCardinality(declType.MinSerializedSize)
 	for i, rule := range celRules {
-		compResults[i] = compileRule(s, rule, envSet, envLoader, estimator, maxCardinality, perCallLimit)
+		ruleEnvSet, err := prepareEnvSetForRule(envSet, declType, rule)
+		if err != nil {
+			compResults[i] = CompilationResult{Error: &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "failed to prepare environment: " + err.Error()}}
+		} else {
+			compResults[i] = compileRule(s, rule, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
+		}
 	}
 
 	return compResults, nil
@@ -143,6 +149,7 @@ func Compile(s *schema.Structural, declType *apiservercel.DeclType, perCallLimit
 
 func prepareEnvSet(baseEnvSet *environment.EnvSet, declType *apiservercel.DeclType) (*environment.EnvSet, error) {
 	scopedType := declType.MaybeAssignTypeName(generateUniqueSelfTypeName())
+
 	return baseEnvSet.Extend(
 		environment.VersionedOptions{
 			// Feature epoch was actually 1.23, but we artificially set it to 1.0 because these
@@ -155,10 +162,27 @@ func prepareEnvSet(baseEnvSet *environment.EnvSet, declType *apiservercel.DeclTy
 				scopedType,
 			},
 		},
+	)
+}
+
+func prepareEnvSetForRule(baseEnvSet *environment.EnvSet, scopedType *apiservercel.DeclType, rule apiextensions.ValidationRule) (*environment.EnvSet, error) {
+	if rule.OptionalOldSelf == nil || !*rule.OptionalOldSelf {
+		return baseEnvSet.Extend(
+			environment.VersionedOptions{
+				IntroducedVersion: version.MajorMinor(1, 24),
+				EnvOptions: []cel.EnvOption{
+					cel.Variable(OldScopedVarName, scopedType.CelType()),
+				},
+			},
+		)
+	}
+
+	return baseEnvSet.Extend(
 		environment.VersionedOptions{
+			// Is this version correct?
 			IntroducedVersion: version.MajorMinor(1, 24),
 			EnvOptions: []cel.EnvOption{
-				cel.Variable(OldScopedVarName, scopedType.CelType()),
+				cel.Variable(OldScopedVarName, types.NewOptionalType(scopedType.CelType())),
 			},
 		},
 	)

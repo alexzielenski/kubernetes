@@ -309,6 +309,8 @@ func (s *Validator) validateExpressions(ctx context.Context, fldPath *field.Path
 		if compiled.UsesOldSelf && oldObj == nil && !allowsNilOldSelf {
 			// transition rules are evaluated only if there is a comparable existing value
 			continue
+		} else if compiled.UsesOldSelf && allowsNilOldSelf {
+			activation = validationActivationWithOptionalOldSelf(sts, obj, oldObj)
 		}
 		evalResult, evalDetails, err := compiled.Program.ContextEval(ctx, activation)
 		if evalDetails == nil {
@@ -635,6 +637,19 @@ func validationActivationWithOldSelf(sts *schema.Structural, obj, oldObj interfa
 	}
 	if oldObj != nil {
 		va.oldSelf = UnstructuredToVal(oldObj, sts) // +k8s:verify-mutation:reason=clone
+	}
+	return va
+}
+
+func validationActivationWithOptionalOldSelf(sts *schema.Structural, obj, oldObj interface{}) interpreter.Activation {
+	oldValue := types.OptionalNone
+	if oldObj != nil {
+		oldValue = types.OptionalOf(UnstructuredToVal(oldObj, sts)) // +k8s:verify-mutation:reason=clone
+	}
+	va := &validationActivation{
+		self:       UnstructuredToVal(obj, sts),
+		hasOldSelf: true,
+		oldSelf:    oldValue,
 	}
 	return va
 }
