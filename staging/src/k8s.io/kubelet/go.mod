@@ -68,5 +68,6 @@ replace (
 	k8s.io/component-base => ../component-base
 	k8s.io/cri-api => ../cri-api
 	k8s.io/kms => ../kms
+	k8s.io/kube-openapi => github.com/alexzielenski/kube-openapi v0.0.0-20240223233029-649db6989aae
 	k8s.io/kubelet => ../kubelet
 )
